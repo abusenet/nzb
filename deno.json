@@ -1,0 +1,7 @@
+{
+    "tasks": {
+      "compile": "deno task compile:mirror",
+      "compile:mirror": "deno compile --output dist/nzb-mirror --no-check -A nzb-mirror.ts"
+    }
+  }
+  
