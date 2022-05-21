@@ -45,5 +45,5 @@ jobs:
 
       # Run all test files in the repository and collect code coverage. The example
       # runs with all permissions, but it is recommended to run with the minimal permissions your program needs (for example --allow-read).
-      - name: Run tests
-        run: deno test -A --unstable
+      # - name: Run tests
+      #   run: deno test -A --unstable
