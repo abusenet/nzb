@@ -45,7 +45,6 @@ const args = parseFlags(Deno.args, {
 let {
   _: [filename],
   connections,
-  subject,
   from,
   groups,
   date,

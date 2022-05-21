@@ -26,7 +26,7 @@ export class NZB implements Iterable<File> {
   #reader?: Deno.Reader;
   readonly head: Record<string, string> = {};
   readonly files: File[] = [];
-  #segments: number = 0;
+  #segments = 0;
 
   static async from(reader: Deno.Reader): Promise<NZB> {
     const nzb = new NZB(reader);
