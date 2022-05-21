@@ -1,6 +1,6 @@
 import { Article, parseFlags, pooledMap, ProgressBar } from "./deps.ts";
 
-import { NZB } from "../nzb.ts";
+import { NZB } from "./nzb.ts";
 import { mirror } from "./mirror.ts";
 
 const args = parseFlags(Deno.args, {
