@@ -1,7 +1,4 @@
-import { 
-  SAXParser, ElementInfo,
-  Article,
-} from "./deps.ts";
+import { Article, ElementInfo, SAXParser } from "./deps.ts";
 
 export interface File {
   poster: string;
@@ -12,17 +9,17 @@ export interface File {
 }
 
 export interface Segment {
-  id: string,
-  bytes: number,
-  number: number,
+  id: string;
+  bytes: number;
+  number: number;
 }
 
 function escape(html: string): string {
   return html.replace(/&/g, "&amp;")
-        .replace(/</g, "&lt;")
-        .replace(/>/g, "&gt;")
-        .replace(/"/g, "&quot;")
-        .replace(/'/g, "&#39;");
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
 }
 
 export class NZB implements Iterable<File> {
@@ -32,7 +29,7 @@ export class NZB implements Iterable<File> {
   #segments: number = 0;
 
   static async from(reader: Deno.Reader): Promise<NZB> {
-    const nzb = new NZB(reader)
+    const nzb = new NZB(reader);
     await nzb.parse();
     return nzb;
   }
@@ -53,7 +50,7 @@ export class NZB implements Iterable<File> {
     const parser = new SAXParser();
     parser.on("text", (text: string, { qName, attributes }: ElementInfo) => {
       if (qName === "meta") {
-        const type = attributes.find(attr => attr.qName === "type")!.value;
+        const type = attributes.find((attr) => attr.qName === "type")!.value;
         this.head[type] = text;
       }
 
@@ -66,8 +63,12 @@ export class NZB implements Iterable<File> {
         const file: File = this.files.at(-1)!;
         file.segments.push({
           id: text,
-          bytes: Number(attributes.find(attr => attr.qName === "bytes")!.value),
-          number: Number(attributes.find(attr => attr.qName === "number")!.value),
+          bytes: Number(
+            attributes.find((attr) => attr.qName === "bytes")!.value,
+          ),
+          number: Number(
+            attributes.find((attr) => attr.qName === "number")!.value,
+          ),
         });
 
         this.#segments++;
@@ -109,20 +110,24 @@ export class NZB implements Iterable<File> {
         return {
           next(): IteratorResult<Article> {
             if (currentFile <= lastFile) {
-              const { poster, date, subject, groups, segments } = files[currentFile];
+              const { poster, date, subject, groups, segments } =
+                files[currentFile];
               const total = segments.length;
               if (currentSegment <= (total - 1)) {
-                const { id, number, bytes, } = segments[currentSegment++];
+                const { id, number, bytes } = segments[currentSegment++];
                 const article = new Article({
                   headers: {
                     "from": poster,
                     "date": new Date(Number(date) * 1000).toUTCString(),
                     // The file's subject is the subject of the first segment, so we
                     // replace it with the current number.
-                    "subject": subject.replace(`(1/${ total })`, `(${ number }/${ total })`),
+                    "subject": subject.replace(
+                      `(1/${total})`,
+                      `(${number}/${total})`,
+                    ),
                     "newsgroups": groups.join(","),
                     "message-id": `<${id}>`,
-                    "bytes": `${ bytes }`,
+                    "bytes": `${bytes}`,
                   },
                 });
                 article.number = number;
@@ -135,10 +140,10 @@ export class NZB implements Iterable<File> {
             } else {
               return { done: true, value: null };
             }
-          }
-        }
-      }
-    }
+          },
+        };
+      },
+    };
   }
 
   toString() {
@@ -148,30 +153,46 @@ export class NZB implements Iterable<File> {
       `<nzb xmlns="http://www.newzbin.com/DTD/2003/nzb">`,
 
       `  <head>`,
-      `${ Object.entries(this.head).map(([type, value]) => [
-      `    <meta type="${ type }">${ value }</meta>`
-      ].join("\n")).join("\n") }`,
+      `${
+        Object.entries(this.head).map(([type, value]) =>
+          [
+            `    <meta type="${type}">${value}</meta>`,
+          ].join("\n")
+        ).join("\n")
+      }`,
       `  </head>`,
 
-      `${ this.files.map(({ poster, date, subject, groups, segments }) => [
+      `${
+        this.files.map(({ poster, date, subject, groups, segments }) =>
+          [
+            `  <file poster="${escape(poster)}" date="${date}" subject="${
+              escape(subject)
+            }">`,
 
-      `  <file poster="${ escape(poster) }" date="${ date }" subject="${ escape(subject) }">`,
+            `    <groups>`,
+            `${
+              groups.map((group) =>
+                [
+                  `      <group>${group}</group>`,
+                ].join("\n")
+              ).join("\n")
+            }`,
+            `    </groups>`,
 
-      `    <groups>`,
-      `${ groups.map(group => [
-      `      <group>${ group }</group>`,
-      ].join("\n")).join("\n")}`,
-      `    </groups>`,
+            `    <segments>`,
+            `${
+              segments.map(({ id, bytes, number }) =>
+                [
+                  `      <segment bytes="${bytes}" number="${number}">${id}</segment>`,
+                ].join("\n")
+              ).join("\n")
+            }`,
+            `    </segments>`,
 
-      `    <segments>`,
-      `${ segments.map(({ id, bytes, number }) => [
-      `      <segment bytes="${ bytes}" number="${ number }">${ id }</segment>`,
-      ].join("\n")).join("\n")}`,
-      `    </segments>`,
-
-      `  </file>`,
-
-      ].join("\n")).join("\n")}`,
+            `  </file>`,
+          ].join("\n")
+        ).join("\n")
+      }`,
 
       `</nzb>`,
     ].join("\n");

@@ -1,23 +1,23 @@
-import {
-  parseFlags,
-  pooledMap,
-  Article,
-  ProgressBar,
-} from "./deps.ts";
+import { Article, parseFlags, pooledMap, ProgressBar } from "./deps.ts";
 
 import { NZB } from "../nzb.ts";
 import { mirror } from "./mirror.ts";
 
 const args = parseFlags(Deno.args, {
   string: [
-    "hostname", "port",
-    "username", "password",
+    "hostname",
+    "port",
+    "username",
+    "password",
     "connections",
     "connect-retries",
     "reconnect-delay",
     "request-retries",
     "post-retry-delay",
-    "subject", "from", "groups", "date",
+    "subject",
+    "from",
+    "groups",
+    "date",
     "message-id", // Format of generated Message-ID. Default to `${uuid}@nntp`
     "out",
   ],
@@ -43,9 +43,12 @@ const args = parseFlags(Deno.args, {
 });
 
 let {
-  _: [ filename ],
+  _: [filename],
   connections,
-  subject, from, groups, date,
+  subject,
+  from,
+  groups,
+  date,
   out,
 } = args;
 
@@ -70,11 +73,11 @@ const nzb = await NZB.from(await Deno.open(filename as string));
 
 const total = nzb.segments;
 const progress = new ProgressBar({
-  title: `Mirroring nzb ${ filename } using ${ connections } connections`,
+  title: `Mirroring nzb ${filename} using ${connections} connections`,
   total,
-  complete: '=',
-  incomplete: '-',
-  display: '[:bar] :completed/:total articles (:percent) - :time',
+  complete: "=",
+  incomplete: "-",
+  display: "[:bar] :completed/:total articles (:percent) - :time",
 });
 
 const encoder = new TextEncoder();
@@ -84,14 +87,16 @@ function writeln(lines: string | string[], ending = "\n"): Promise<number> {
     lines = [lines];
   }
   // Filters out undefined lines.
-  lines = lines.filter(x => x);
+  lines = lines.filter((x) => x);
   return output.write(encoder.encode(lines.join(ending) + ending));
 }
 
 /** Writes head lines first if any. */
-const headlines = Object.entries(nzb.head).map(([type, value]) => [
-  `    <meta type="${ type }">${ value }</meta>`
-].join("\n"));
+const headlines = Object.entries(nzb.head).map(([type, value]) =>
+  [
+    `    <meta type="${type}">${value}</meta>`,
+  ].join("\n")
+);
 
 await writeln([
   `<?xml version="1.0" encoding="utf-8"?>`,
@@ -102,21 +107,25 @@ await writeln([
 if (headlines.length) {
   await writeln([
     `  <head>`,
-    `${ headlines.join("\n") }`,
-    `  </head>`
+    `${headlines.join("\n")}`,
+    `  </head>`,
   ]);
 }
 
-const results = pooledMap(connections, nzb.articles(), async article => {
-  const result = await mirror(article, new Article({
-    headers: {
-      date,
-      from,
-      bytes: article.headers.get("bytes")!,
-      newsgroups: groups,
-      subject: article.headers.get("subject")!,
-    },
-  }), args);
+const results = pooledMap(connections, nzb.articles(), async (article) => {
+  const result = await mirror(
+    article,
+    new Article({
+      headers: {
+        date,
+        from,
+        bytes: article.headers.get("bytes")!,
+        newsgroups: groups,
+        subject: article.headers.get("subject")!,
+      },
+    }),
+    args,
+  );
 
   result!.number = article.number;
 
@@ -144,18 +153,28 @@ for await (const article of results) {
     }
 
     await writeln([
-      `  <file poster="${ escape(from) }" date="${ (+ new Date(date)) / 1000 }" subject="${ escape(subject) }">`,
+      `  <file poster="${escape(from)}" date="${
+        (+new Date(date)) / 1000
+      }" subject="${escape(subject)}">`,
       `    <groups>`,
-      `${ newsgroups.split(",").map(group => [
-      `      <group>${ group }</group>`,
-      ].join("\n")).join("\n")}`,
+      `${
+        newsgroups.split(",").map((group) =>
+          [
+            `      <group>${group}</group>`,
+          ].join("\n")
+        ).join("\n")
+      }`,
       `    </groups>`,
 
       `    <segments>`,
     ]);
   }
 
-  await writeln(`      <segment bytes="${ bytes }" number="${ number }">${ id.replace(/<([^>]+)>/, "$1") }</segment>`);
+  await writeln(
+    `      <segment bytes="${bytes}" number="${number}">${
+      id.replace(/<([^>]+)>/, "$1")
+    }</segment>`,
+  );
 
   progress.render(index++);
 }
@@ -168,8 +187,8 @@ await writeln([
 
 function escape(html: string): string {
   return html.replace(/&/g, "&amp;")
-        .replace(/</g, "&lt;")
-        .replace(/>/g, "&gt;")
-        .replace(/"/g, "&quot;")
-        .replace(/'/g, "&#39;");
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
 }

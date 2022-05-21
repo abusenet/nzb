@@ -4,8 +4,8 @@ Collection of tools handling NZB files
 
 ## Usage
 
-Each commands can be run under Deno with `deno run -A {command}.ts`,
-or using the pre-built binaries for each platforms in Releases.
+Each commands can be run under Deno with `deno run -A {command}.ts`, or using
+the pre-built binaries for each platforms in Releases.
 
 ## Commands
 
@@ -20,8 +20,8 @@ or using the pre-built binaries for each platforms in Releases.
 
 ### Usage
 
-Mirrors the articles in the source NZB, either to the same group or new ones, and
-outputs the resulting NZB to stdout or a specified output file.
+Mirrors the articles in the source NZB, either to the same group or new ones,
+and outputs the resulting NZB to stdout or a specified output file.
 
 ```
 nzb-mirror \

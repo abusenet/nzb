@@ -1,21 +1,17 @@
-import {
-  parseFlags,
-  Client, Article,
-  retryAsync,
-} from "./deps.ts";
+import { Article, Client, parseFlags, retryAsync } from "./deps.ts";
 
 export async function mirror(
   src: string | Article = Deno.args[0],
   dst: Article = new Article(),
   options = parseFlags(Deno.args),
 ): Promise<Article | null> {
-
   if (typeof src === "string") {
     src = new Article(src);
   }
 
   const originalMessageId = src.headers.get("message-id")!;
-  const messageId = dst.headers.get("message-id") || `<${ crypto.randomUUID() }@nntp>`;
+  const messageId = dst.headers.get("message-id") ||
+    `<${crypto.randomUUID()}@nntp>`;
 
   const client = await setup(options);
 
@@ -60,10 +56,9 @@ export async function mirror(
     return dst;
   }
 
-  console.error(`${ response.status } ${ response.statusText }`);
+  console.error(`${response.status} ${response.statusText}`);
 
   return null;
-
 }
 
 async function setup(options: Record<string, string> = {}) {
@@ -92,11 +87,11 @@ async function setup(options: Record<string, string> = {}) {
 
 function setDefaults(headers: Headers, defaults: Record<string, string> = {}) {
   Object.entries(defaults)
-  .filter(([_k, v]) => v)
-  .forEach(([k, v]) => {
-    const header = headers.get(k);
-    if (!header || header === "undefined") {
-      headers.set(k, v);
-    }
-  });
+    .filter(([_k, v]) => v)
+    .forEach(([k, v]) => {
+      const header = headers.get(k);
+      if (!header || header === "undefined") {
+        headers.set(k, v);
+      }
+    });
 }
