@@ -27,8 +27,8 @@ jobs:
     steps:
       - name: Set git to use LF
         run: |
-          git config --system core.autocrlf false
-          git config --system core.eol lf
+          git config --global core.autocrlf false
+          git config --global core.eol lf
   
       - name: Setup repo
         uses: actions/checkout@v3
