@@ -2,7 +2,14 @@ import { Article, ElementInfo, SAXParser } from "./deps.ts";
 
 export interface File {
   poster: string;
-  date: string;
+  /**
+   * The last modified date of the file as the number of milliseconds
+   * since the Unix epoch (January 1, 1970 at midnight). Files without
+   * a known last modified date return the current date.
+   */
+  lastModified: number;
+  name: string;
+  size: number;
   subject: string;
   groups: string[];
   segments: Segment[];
@@ -27,15 +34,17 @@ export class NZB implements Iterable<File> {
   readonly head: Record<string, string> = {};
   readonly files: File[] = [];
   #segments = 0;
+  name?: string;
 
-  static async from(reader: Deno.Reader): Promise<NZB> {
-    const nzb = new NZB(reader);
+  static async from(reader: Deno.Reader, name?: string): Promise<NZB> {
+    const nzb = new NZB(reader, name);
     await nzb.parse();
     return nzb;
   }
 
-  constructor(reader?: Deno.Reader) {
+  constructor(reader?: Deno.Reader, name?: string) {
     this.#reader = reader;
+    this.name = name;
   }
 
   get segments(): number {
@@ -79,18 +88,43 @@ export class NZB implements Iterable<File> {
       if (element.qName === "file") {
         const file: File = {
           poster: "",
-          date: "",
           subject: "",
+          name: "",
+          lastModified: Date.now(),
+          size: 0,
           groups: [],
           segments: [],
         };
 
         element.attributes.forEach(({ qName, value }) => {
+          if (qName === "poster") file.poster = qName;
+          // Stores the seconds specfified in `date` attribute as milliseconds.
+          if (qName === "date") file.lastModified = Number(value) * 1000;
+
+          if (qName === "subject") {
+            file.subject = value;
+
+            if (!value.indexOf("yEnc")) return;
+            const { name, size } = yEncParse(value);
+            file.name = name || "";
+            file.size = Number(size);
+          }
           // @ts-ignore string key
           file[qName as keyof File] = value;
         });
 
         this.files.push(file);
+      }
+    });
+
+    parser.on("end_element", (element: ElementInfo) => {
+      if (element.qName === "file") {
+        // Checks if the File has a size (calculated from yEnc subject).
+        // If not, sums the bytes of all its segments.
+        const file: File = this.files.at(-1)!;
+        if (!file.size) {
+          file.size = file.segments.reduce((sum, { bytes }) => sum + bytes, 0);
+        }
       }
     });
 
@@ -111,7 +145,7 @@ export class NZB implements Iterable<File> {
         return {
           next(): IteratorResult<Article> {
             if (currentFile <= lastFile) {
-              const { poster, date, subject, groups, segments } =
+              const { poster, lastModified, subject, groups, segments } =
                 files[currentFile];
               const total = segments.length;
               if (currentSegment <= (total - 1)) {
@@ -119,7 +153,7 @@ export class NZB implements Iterable<File> {
                 const article = new Article({
                   headers: {
                     "from": poster,
-                    "date": new Date(Number(date) * 1000).toUTCString(),
+                    "date": new Date(lastModified).toUTCString(),
                     // The file's subject is the subject of the first segment, so we
                     // replace it with the current number.
                     "subject": subject.replace(
@@ -164,11 +198,11 @@ export class NZB implements Iterable<File> {
       `  </head>`,
 
       `${
-        this.files.map(({ poster, date, subject, groups, segments }) =>
+        this.files.map(({ poster, lastModified, subject, groups, segments }) =>
           [
-            `  <file poster="${escape(poster)}" date="${date}" subject="${
-              escape(subject)
-            }">`,
+            `  <file poster="${escape(poster)}" date="${
+              lastModified / 100
+            }" subject="${escape(subject)}">`,
 
             `    <groups>`,
             `${
@@ -198,4 +232,68 @@ export class NZB implements Iterable<File> {
       `</nzb>`,
     ].join("\n");
   }
+}
+
+const SUBJECT_REGEX =
+  /"(?<name>[^"]+)"[^\d]+(?<size1>[\d]+)?\s?yEnc(?: \((?<partnum>[\d]+)\/(?<numparts>[\d]+)\))?(?:[^\d]+(?<size2>[\d]+)?)?/;
+
+/**
+ * Parses a subject line of a yEnc article to file name and size.
+ *
+ * Standard single-part yEncoded binaries require no special conventions for
+ * the subject line.  It is recommended, however, that yEncoded binaries be
+ * specifically identified as such, until the yEncode encoding format becomes
+ * more widely implemented.
+ *
+ * The suggested format for subject lines for single-part binaries is:
+ *
+ * [Comment1] "filename" 12345 yEnc bytes [Comment2]
+ *
+ * [Comment1] and [Comment2] are optional.  The filename should always be
+ * enclosed in quotes; this allows for easy detection, even when the filename
+ * includes spaces or other special characters.  The word "yEnc" should be
+ * placed in between the file size and the word "bytes".
+ * > (1.2) see additional experience information
+ * > Placing the word "yEnc" between filename+bytes or bytes+comment2
+ * > is acceptable.
+ *
+ * Multi-part archives should always be identified as such.  As with
+ * single-part binaries, they should also be identified as yEncoded until
+ * yEncoding becomes more mainstream.
+ *
+ * The (strongly) recommended format for subject lines for multi-part binaries
+ * is:
+ *
+ * [Comment1] "filename" yEnc (partnum/numparts) [size] [Comment2]
+ *
+ * Again, [Comment1] and [Comment2] are optional.  The [size] value is also
+ * optional here.  The filename must be included, in quotes.  The keyword
+ * "yEnc" is mandatory, and must appear between the filename and the size (or
+ * Comment2, if size is omitted).  Future revisions of the draft may specify
+ * additional information may be inserted between the "yEnc" keyword and the
+ * opening parenthesis of the part number.
+ * > (1.2) see additional experience information
+ * > Placing the word "yEnc" between (#/#)+size or size+comment2
+ * > is acceptable.
+ *
+ * ## Examples
+ *
+ * ```ts
+ * yEncParse(`reftestnzb 100MB f4d76efc6789 [01/16] - "SomeTestfile-100MB.part1.rar" yEnc (1/22) 15728640`);
+ * { name: "SomeTestfile-100MB.part1.rar", size: 15728640 }
+ * ```
+ */
+function yEncParse(subject: string) {
+  const { groups } = subject.match(SUBJECT_REGEX) || {};
+  if (groups) {
+    const { name, size1, partnum, numparts, size2 } = groups;
+    return {
+      name,
+      size: size1 || size2,
+      partnum,
+      numparts,
+    };
+  }
+
+  return {};
 }
