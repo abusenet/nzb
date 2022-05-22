@@ -21,9 +21,7 @@ using the pre-built binaries for each platforms in Releases.
 Mirrors the articles in the source NZB, either to the same group or new ones,
 and outputs the resulting NZB to stdout or a specified output file.
 
-### Usage
-
-```
+```shell
 nzb mirror \
   --hostname=localhost \
   --port=119 \
@@ -45,9 +43,7 @@ nzb mirror \
 
 Serves the files specified in an input NZB file as a directory listing.
 
-### Usage
-
-```
+```shell
 nzb serve \
   --hostname=0.0.0.0 \
   --port=8000 \
