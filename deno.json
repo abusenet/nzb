@@ -1,7 +1,6 @@
 {
-    "tasks": {
-      "compile": "deno task compile:mirror",
-      "compile:mirror": "deno compile --output dist/nzb-mirror --no-check -A nzb-mirror.ts"
-    }
+  "tasks": {
+    "mirror": "deno run --allow-env --allow-read --allow-write --allow-net mod.ts mirror",
+    "compile": "deno compile --output dist/nzb --allow-env --allow-read --allow-write --allow-net mod.ts"
   }
-  
+}

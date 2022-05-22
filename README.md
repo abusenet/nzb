@@ -4,8 +4,8 @@ Collection of tools handling NZB files
 
 ## Usage
 
-Each commands can be run under Deno with `deno run -A mod.ts command args`, or using
-the pre-built binaries for each platforms in Releases.
+Each commands can be run under Deno with `deno run -A mod.ts command args`, or
+using the pre-built binaries for each platforms in Releases.
 
 ## Commands
 
