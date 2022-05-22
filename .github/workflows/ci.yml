@@ -24,11 +24,21 @@ jobs:
       matrix:
         os: [ ubuntu-latest, macos-11, windows-2019 ]
 
+    # Set DENO_DIR to an absolute or relative path on the runner.
+    env:
+      DENO_DIR: .cache
+
     steps:
       - name: Set git to use LF
         run: |
           git config --global core.autocrlf false
           git config --global core.eol lf
+
+      - name: Cache Deno dependencies 
+        uses: actions/cache@v2
+        with:
+          path: ${{ env.DENO_DIR }}
+          key: ${{ secrets.CACHE_VERSION }}-${{ hashFiles('lock.json') }}
   
       - name: Setup repo
         uses: actions/checkout@v3
