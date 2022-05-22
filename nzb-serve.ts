@@ -32,7 +32,7 @@ export function help() {
 
 const encoder = new TextEncoder();
 
-function serveNZB(request: Request, nzb: NZB): Response {
+function serveNZB(_request: Request, nzb: NZB): Response {
   const headers = new Headers();
   headers.set("server", "deno");
 
