@@ -4,17 +4,17 @@ Collection of tools handling NZB files
 
 ## Usage
 
-Each commands can be run under Deno with `deno run -A {command}.ts`, or using
+Each commands can be run under Deno with `deno run -A mod.ts command args`, or using
 the pre-built binaries for each platforms in Releases.
 
 ## Commands
 
-- [x] `nzb-mirror`: Mirrors articles in a NZB file with new information
-- [ ] `nzb-get`: Downloads data specified in a NZB file.
-- [ ] `nzb-extract`: Extracts files in a NZB file into new NZB files.
-- [ ] `nzb-merge`: Merges multiple NZB files into one.
-- [ ] `nzb-serve`: Serves a NZB file as an index webpage.
-- [ ] `nzb-stream`: Streams data specified in a NZB file.
+- [x] `nzb mirror`: Mirrors articles in a NZB file with new information
+- [ ] `nzb get`: Downloads data specified in a NZB file.
+- [ ] `nzb extract`: Extracts files in a NZB file into new NZB files.
+- [ ] `nzb merge`: Merges multiple NZB files into one.
+- [ ] `nzb serve`: Serves a NZB file as an index webpage.
+- [ ] `nzb stream`: Streams data specified in a NZB file.
 
 ## `nzb-mirror`
 
@@ -24,7 +24,7 @@ Mirrors the articles in the source NZB, either to the same group or new ones,
 and outputs the resulting NZB to stdout or a specified output file.
 
 ```
-nzb-mirror \
+nzb mirror \
   --hostname=localhost \
   --port=119 \
   --username= \

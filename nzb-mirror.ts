@@ -1,9 +1,9 @@
 import { Article, parseFlags, pooledMap, ProgressBar } from "./deps.ts";
 
 import { NZB } from "./nzb.ts";
-import { mirror } from "./mirror.ts";
+import { mirror as mirrorArticle } from "./mirror.ts";
 
-const args = parseFlags(Deno.args, {
+const parseOptions = {
   string: [
     "hostname",
     "port",
@@ -40,149 +40,166 @@ const args = parseFlags(Deno.args, {
     connections: Number(Deno.env.get("NNTP_CONNECTIONS") || 3),
     from: Deno.env.get("NNTP_POSTER") || "poster@example.com",
   },
-});
+};
 
-let {
-  _: [filename],
-  connections,
-  from,
-  groups,
-  date,
-  out,
-} = args;
-
-let output: Deno.Writer;
-if (!out || out === "-") {
-  output = Deno.stdout;
-} else {
-  output = await Deno.open(out, {
-    read: false,
-    write: true,
-    create: true,
-    truncate: true,
-  });
+if (import.meta.main) {
+  await mirror();
 }
 
-// `date` can have the special value 'now' to refer script's start time.
-if (date === "now") {
-  date = new Date().toUTCString();
+export function help() {
+  return `Usage: nzb-mirror [...flags] <input>`;
 }
 
-const nzb = await NZB.from(await Deno.open(filename as string));
+export async function mirror(args = Deno.args) {
+  const options = parseFlags(args, parseOptions);
+  let {
+    _: [filename],
+    connections,
+    from,
+    groups,
+    date,
+    out,
+  } = options;
 
-const total = nzb.segments;
-const progress = new ProgressBar({
-  title: `Mirroring nzb ${filename} using ${connections} connections`,
-  total,
-  complete: "=",
-  incomplete: "-",
-  display: "[:bar] :completed/:total articles (:percent) - :time",
-});
-
-const encoder = new TextEncoder();
-
-function writeln(lines: string | string[], ending = "\n"): Promise<number> {
-  if (!Array.isArray(lines)) {
-    lines = [lines];
+  if (!filename) {
+    console.error("Missing input");
+    console.error(help());
+    return;
   }
-  // Filters out undefined lines.
-  lines = lines.filter((x) => x);
-  return output.write(encoder.encode(lines.join(ending) + ending));
-}
 
-/** Writes head lines first if any. */
-const headlines = Object.entries(nzb.head).map(([type, value]) =>
-  [
-    `    <meta type="${type}">${value}</meta>`,
-  ].join("\n")
-);
+  let output: Deno.Writer;
+  if (!out || out === "-") {
+    output = Deno.stdout;
+  } else {
+    output = await Deno.open(out, {
+      read: false,
+      write: true,
+      create: true,
+      truncate: true,
+    });
+  }
 
-await writeln([
-  `<?xml version="1.0" encoding="utf-8"?>`,
-  `<!DOCTYPE nzb PUBLIC "-//newzBin//DTD NZB 1.1//EN" "http://www.newzbin.com/DTD/nzb/nzb-1.1.dtd">`,
-  `<nzb xmlns="http://www.newzbin.com/DTD/2003/nzb">`,
-]);
+  // `date` can have the special value 'now' to refer script's start time.
+  if (date === "now") {
+    date = new Date().toUTCString();
+  }
 
-if (headlines.length) {
-  await writeln([
-    `  <head>`,
-    `${headlines.join("\n")}`,
-    `  </head>`,
-  ]);
-}
+  const nzb = await NZB.from(await Deno.open(filename as string));
 
-const results = pooledMap(connections, nzb.articles(), async (article) => {
-  const result = await mirror(
-    article,
-    new Article({
-      headers: {
-        date,
-        from,
-        bytes: article.headers.get("bytes")!,
-        newsgroups: groups,
-        subject: article.headers.get("subject")!,
-      },
-    }),
-    args,
+  const total = nzb.segments;
+  const progress = new ProgressBar({
+    title: `Mirroring using ${connections} connections`,
+    total,
+    complete: "=",
+    incomplete: "-",
+    display: "[:bar] :completed/:total articles (:percent) - :time",
+  });
+
+  const encoder = new TextEncoder();
+
+  function writeln(lines: string | string[], ending = "\n"): Promise<number> {
+    if (!Array.isArray(lines)) {
+      lines = [lines];
+    }
+    // Filters out undefined lines.
+    lines = lines.filter((x) => x);
+    return output.write(encoder.encode(lines.join(ending) + ending));
+  }
+
+  /** Writes head lines first if any. */
+  const headlines = Object.entries(nzb.head).map(([type, value]) =>
+    [
+      `    <meta type="${type}">${value}</meta>`,
+    ].join("\n")
   );
 
-  result!.number = article.number;
+  await writeln([
+    `<?xml version="1.0" encoding="utf-8"?>`,
+    `<!DOCTYPE nzb PUBLIC "-//newzBin//DTD NZB 1.1//EN" "http://www.newzbin.com/DTD/nzb/nzb-1.1.dtd">`,
+    `<nzb xmlns="http://www.newzbin.com/DTD/2003/nzb">`,
+  ]);
 
-  return result;
-});
-
-let index = 0;
-for await (const article of results) {
-  const { number, headers } = article!;
-  const date = headers.get("date")!;
-  const from = headers.get("from")!;
-  const newsgroups = headers.get("newsgroups")!;
-  const subject = headers.get("subject")!;
-  const id = headers.get("message-id")!;
-  const bytes = headers.get("bytes")!;
-
-  // Wraps with a `<file>` node if it's the first article (with number 1).
-  if (number === 1) {
-    // However, if this is not the very first article in the NZB, we need to close previous file.
-    if (index) {
-      await writeln([
-        `    </segments>`,
-        `  </file>`,
-      ]);
-    }
-
+  if (headlines.length) {
     await writeln([
-      `  <file poster="${escape(from)}" date="${
-        (+new Date(date)) / 1000
-      }" subject="${escape(subject)}">`,
-      `    <groups>`,
-      `${
-        newsgroups.split(",").map((group) =>
-          [
-            `      <group>${group}</group>`,
-          ].join("\n")
-        ).join("\n")
-      }`,
-      `    </groups>`,
-
-      `    <segments>`,
+      `  <head>`,
+      `${headlines.join("\n")}`,
+      `  </head>`,
     ]);
   }
 
-  await writeln(
-    `      <segment bytes="${bytes}" number="${number}">${
-      id.replace(/<([^>]+)>/, "$1")
-    }</segment>`,
-  );
+  const results = pooledMap(connections, nzb.articles(), async (article) => {
+    const result = await mirrorArticle(
+      article,
+      new Article({
+        headers: {
+          date,
+          from,
+          bytes: article.headers.get("bytes")!,
+          newsgroups: groups,
+          subject: article.headers.get("subject")!,
+        },
+      }),
+      options,
+    );
 
-  progress.render(index++);
+    result!.number = article.number;
+
+    return result;
+  });
+
+  let index = 0;
+  for await (const article of results) {
+    const { number, headers } = article!;
+    const date = headers.get("date")!;
+    const from = headers.get("from")!;
+    const newsgroups = headers.get("newsgroups")!;
+    const subject = headers.get("subject")!;
+    const id = headers.get("message-id")!;
+    const bytes = headers.get("bytes")!;
+
+    // Wraps with a `<file>` node if it's the first article (with number 1).
+    if (number === 1) {
+      // However, if this is not the very first article in the NZB, we need to close previous file.
+      if (index) {
+        await writeln([
+          `    </segments>`,
+          `  </file>`,
+        ]);
+      }
+
+      await writeln([
+        `  <file poster="${escape(from)}" date="${
+          (+new Date(date)) / 1000
+        }" subject="${escape(subject)}">`,
+        `    <groups>`,
+        `${
+          newsgroups.split(",").map((group) =>
+            [
+              `      <group>${group}</group>`,
+            ].join("\n")
+          ).join("\n")
+        }`,
+        `    </groups>`,
+
+        `    <segments>`,
+      ]);
+    }
+
+    await writeln(
+      `      <segment bytes="${bytes}" number="${number}">${
+        id.replace(/<([^>]+)>/, "$1")
+      }</segment>`,
+    );
+
+    progress.render(index++);
+  }
+
+  await writeln([
+    `    </segments>`,
+    `  </file>`,
+    `</nzb>`,
+  ]);
 }
-
-await writeln([
-  `    </segments>`,
-  `  </file>`,
-  `</nzb>`,
-]);
 
 function escape(html: string): string {
   return html.replace(/&/g, "&amp;")

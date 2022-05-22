@@ -86,6 +86,7 @@ export class NZB implements Iterable<File> {
         };
 
         element.attributes.forEach(({ qName, value }) => {
+          // @ts-ignore string key
           file[qName as keyof File] = value;
         });
 
