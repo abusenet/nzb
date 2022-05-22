@@ -18,8 +18,8 @@ using the pre-built binaries for each platforms in Releases.
 
 ## `nzb-mirror`
 
-Mirrors the articles in the source NZB, either to the same group or new ones,
-and outputs the resulting NZB to stdout or a specified output file.
+Mirrors the articles in the input NZB, either to the same group or new ones, and
+outputs the resulting NZB to stdout or a specified output file.
 
 ```shell
 nzb mirror \
@@ -37,6 +37,16 @@ nzb mirror \
   --date \ # Specific date for each article. Can take a "now" to refer script's start time.
   source.nzb \ # Source file to mirror from.
   --out=mirror.nzb # Path to a file to write new NZB to.
+```
+
+## `nzb-extract`
+
+Extracts only certain files in the input NZB based on a Glob or RegExp. The
+resulting NZB is written to `stdout` or a file specifiied in `--out` flag.
+
+```shell
+nzb extract source.nzb "*.part*.rar" > parts.nzb
+nzb extract source.nzb "*.part*.rar" --out parts.nzb
 ```
 
 ## `nzb-serve`
