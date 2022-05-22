@@ -1,6 +1,10 @@
 {
   "tasks": {
     "mirror": "deno run --allow-env --allow-read --allow-write --allow-net mod.ts mirror",
-    "compile": "deno compile --output dist/nzb --allow-env --allow-read --allow-write --allow-net mod.ts"
+    "compile:": "deno task compile:x86_64-unknown-linux-gnu && deno task compile:x86_64-pc-windows-msvc && deno task compile:x86_64-apple-darwin && deno task compile:aarch64-apple-darwin",
+    "compile:x86_64-unknown-linux-gnu": "deno compile --target x86_64-unknown-linux-gnu --output dist/nzb-x86_64-unknown-linux-gnu --allow-env --allow-read --allow-write --allow-net mod.ts",
+    "compile:x86_64-pc-windows-msvc": "deno compile --target x86_64-pc-windows-msvc --output dist/nzb-x86_64-pc-windows-msvc.exe --allow-env --allow-read --allow-write --allow-net mod.ts",
+    "compile:x86_64-apple-darwin": "deno compile --target x86_64-apple-darwin --output dist/nzb-x86_64-apple-darwin --allow-env --allow-read --allow-write --allow-net mod.ts",
+    "compile:aarch64-apple-darwin": "deno compile --target aarch64-apple-darwin --output dist/nzb-aarch64-apple-darwin --allow-env --allow-read --allow-write --allow-net mod.ts"
   }
 }
