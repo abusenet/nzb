@@ -62,3 +62,12 @@ jobs:
       # runs with all permissions, but it is recommended to run with the minimal permissions your program needs (for example --allow-read).
       # - name: Run tests
       #   run: deno test -A --unstable
+
+      - name: Compile
+        run: deno task compile
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v3
+        with:
+          name: bin
+          path: dist
