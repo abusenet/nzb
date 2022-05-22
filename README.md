@@ -18,10 +18,10 @@ using the pre-built binaries for each platforms in Releases.
 
 ## `nzb-mirror`
 
-### Usage
-
 Mirrors the articles in the source NZB, either to the same group or new ones,
 and outputs the resulting NZB to stdout or a specified output file.
+
+### Usage
 
 ```
 nzb mirror \
@@ -39,4 +39,17 @@ nzb mirror \
   --date \ # Specific date for each article. Can take a "now" to refer script's start time.
   source.nzb \ # Source file to mirror from.
   --out=mirror.nzb # Path to a file to write new NZB to.
+```
+
+## `nzb-serve`
+
+Serves the files specified in an input NZB file as a directory listing.
+
+### Usage
+
+```
+nzb serve \
+  --hostname=0.0.0.0 \
+  --port=8000 \
+  source.nzb \ # Source NZB file to serve.
 ```

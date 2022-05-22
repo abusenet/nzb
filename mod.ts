@@ -1,7 +1,9 @@
 import { mirror } from "./nzb-mirror.ts";
+import { serve } from "./nzb-serve.ts";
 
 const exports = {
   mirror,
+  serve,
 };
 
 const [command, ...args] = Deno.args;
