@@ -19,11 +19,22 @@ export function help() {
   return `Usage: nzb-extract [...flags] <input> <glob|regex>`;
 }
 
-export async function extract(args = Deno.args) {
+/**
+ * Extracts files from input NZB based on Glob or RegExp.
+ *
+ * If `out` flag is specified with a path to a file, writes resulting
+ * to that file; otherwise, to `stdout`.
+ *
+ * A second parameter can be used to provide non-string arguments,
+ * such as `out` with a `Writer`.
+ */
+export async function extract(args = Deno.args, defaults = {}) {
   const {
     _: [filename, pattern],
-    out,
+    ...flags
   } = parseFlags(args, parseOptions);
+
+  const { out } = Object.assign(defaults, flags);
 
   if (!filename) {
     console.error("Missing input");
@@ -31,10 +42,10 @@ export async function extract(args = Deno.args) {
     return;
   }
 
-  let output: Deno.Writer;
+  let output: Deno.Writer & Deno.Closer = out;
   if (!out || out === "-") {
     output = Deno.stdout;
-  } else {
+  } else if (typeof out === "string") {
     output = await Deno.open(out, {
       read: false,
       write: true,
@@ -55,9 +66,11 @@ export async function extract(args = Deno.args) {
     regex = new RegExp(pattern as string);
   }
 
+  // Filters out files that do not matchthe regex.
   filter(nzb.files, regex);
 
   await output.write(new TextEncoder().encode(nzb.toString()));
+  output.close();
 }
 
 /** Filter an array based on a regex inline. */
