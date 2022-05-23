@@ -1,3 +1,4 @@
+#!/usr/bin/env -S deno run --allow-net --allow-env --allow-read --allow-write
 import { Article, parseFlags, pooledMap, ProgressBar } from "./deps.ts";
 
 import { NZB } from "./nzb.ts";

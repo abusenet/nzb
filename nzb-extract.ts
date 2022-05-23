@@ -1,3 +1,4 @@
+#!/usr/bin/env -S deno run --allow-read --allow-write
 import { globToRegExp, isGlob, parseFlags } from "./deps.ts";
 import { File, NZB } from "./nzb.ts";
 
