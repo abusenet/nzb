@@ -1,97 +1,211 @@
-import { Article, Client, parseFlags, retryAsync } from "./deps.ts";
+#!/usr/bin/env -S deno run --allow-net --allow-env --allow-read --allow-write
+import { Article, parseFlags, pooledMap, ProgressBar } from "./deps.ts";
 
-export async function mirror(
-  src: string | Article = Deno.args[0],
-  dst: Article = new Article(),
-  options = parseFlags(Deno.args),
-): Promise<Article | null> {
-  if (typeof src === "string") {
-    src = new Article(src);
+import { NZB } from "./model.ts";
+import { mirrorArticle } from "./mirrorArticle.ts";
+
+const parseOptions = {
+  string: [
+    "hostname",
+    "port",
+    "username",
+    "password",
+    "connections",
+    "connect-retries",
+    "reconnect-delay",
+    "request-retries",
+    "post-retry-delay",
+    "subject",
+    "from",
+    "groups",
+    "date",
+    "message-id", // Format of generated Message-ID. Default to `${uuid}@nntp`
+    "out",
+  ],
+  alias: {
+    "hostname": ["host", "h"],
+    "port": "P",
+    "username": ["user", "u"],
+    "password": ["passw", "p"],
+    "connections": "n",
+    "subject": "s",
+    "from": "f",
+    "groups": "g",
+    "out": "o",
+  },
+  default: {
+    hostname: Deno.env.get("NNTP_HOSTNAME"),
+    port: Deno.env.get("NNTP_PORT"),
+    username: Deno.env.get("NNTP_USER"),
+    password: Deno.env.get("NNTP_PASS"),
+    connections: Number(Deno.env.get("NNTP_CONNECTIONS") || 3),
+    from: Deno.env.get("NNTP_POSTER") || "poster@example.com",
+  },
+};
+
+if (import.meta.main) {
+  await mirror();
+}
+
+export function help() {
+  return `Usage: nzb-mirror [...flags] <input>`;
+}
+
+export async function mirror(args = Deno.args) {
+  const options = parseFlags(args, parseOptions);
+  let {
+    _: [filename],
+    connections,
+    from,
+    groups,
+    date,
+    out,
+  } = options;
+
+  if (!filename) {
+    console.error("Missing input");
+    console.error(help());
+    return;
   }
 
-  const originalMessageId = src.headers.get("message-id")!;
-  const messageId = dst.headers.get("message-id") ||
-    `<${crypto.randomUUID()}@nntp>`;
-
-  const client = await setup(options);
-
-  // Some providers require choosing group before accessing article.
-  if (options["join-group"]) {
-    await client.group(src.headers.get("newsgroups")!.split(",")[0]);
+  let output: Deno.Writer;
+  if (!out || out === "-") {
+    output = Deno.stdout;
+  } else {
+    output = await Deno.open(out, {
+      read: false,
+      write: true,
+      create: true,
+      truncate: true,
+    });
   }
 
-  let response = await client.article(originalMessageId);
-  const { status, headers } = response;
+  // `date` can have the special value 'now' to refer script's start time.
+  if (date === "now") {
+    date = new Date().toUTCString();
+  }
 
-  if (status === 430) return null;
+  const nzb = await NZB.from(await Deno.open(filename as string));
 
-  // Reads the body to completion so we can reuse the connection,
-  // then converts it to a new ReadableStream.
-  const body = (await response.blob()).stream();
-
-  setDefaults(dst.headers, {
-    date: new Date().toUTCString(),
-    from: headers.get("from")!,
-    "message-id": messageId,
-    newsgroups: headers.get("newsgroups")!,
-    subject: headers.get("subject")!,
+  const total = nzb.segments;
+  const progress = new ProgressBar({
+    title: `Mirroring using ${connections} connections`,
+    total,
+    complete: "=",
+    incomplete: "-",
+    display: "[:bar] :completed/:total articles (:percent) - :time",
   });
 
-  dst.body = body;
+  const encoder = new TextEncoder();
 
-  response = await retryAsync(
-    async () => {
-      const response = await client.post(dst);
-      return response;
-    },
-    {
-      delay: Number(options["post-retry-delay"] || 0),
-      maxTry: Number(options["request-retries"] || 5),
-    },
-  );
-
-  await client.close();
-
-  if (response.status === 240) {
-    return dst;
+  function writeln(lines: string | string[], ending = "\n"): Promise<number> {
+    if (!Array.isArray(lines)) {
+      lines = [lines];
+    }
+    // Filters out undefined lines.
+    lines = lines.filter((x) => x);
+    return output.write(encoder.encode(lines.join(ending) + ending));
   }
 
-  console.error(`${response.status} ${response.statusText}`);
-
-  return null;
-}
-
-async function setup(options: Record<string, string> = {}) {
-  const { hostname, port, username, password } = options;
-
-  return await retryAsync(
-    async () => {
-      const client = await Client.connect({
-        hostname,
-        port: Number(port),
-        logLevel: "WARNING",
-      });
-
-      if (username) {
-        await client.authinfo(username, password);
-      }
-
-      return client;
-    },
-    {
-      maxTry: Number(options["connect-retries"] || 1),
-      delay: Number(options["reconnect-delay"] || 15 * 1000),
-    },
+  /** Writes head lines first if any. */
+  const headlines = Object.entries(nzb.head).map(([type, value]) =>
+    [
+      `    <meta type="${type}">${value}</meta>`,
+    ].join("\n")
   );
+
+  await writeln([
+    `<?xml version="1.0" encoding="utf-8"?>`,
+    `<!DOCTYPE nzb PUBLIC "-//newzBin//DTD NZB 1.1//EN" "http://www.newzbin.com/DTD/nzb/nzb-1.1.dtd">`,
+    `<nzb xmlns="http://www.newzbin.com/DTD/2003/nzb">`,
+  ]);
+
+  if (headlines.length) {
+    await writeln([
+      `  <head>`,
+      `${headlines.join("\n")}`,
+      `  </head>`,
+    ]);
+  }
+
+  const results = pooledMap(connections, nzb.articles(), async (article) => {
+    const result = await mirrorArticle(
+      article,
+      new Article({
+        headers: {
+          date,
+          from,
+          bytes: article.headers.get("bytes")!,
+          newsgroups: groups,
+          subject: article.headers.get("subject")!,
+        },
+      }),
+      options,
+    );
+
+    result!.number = article.number;
+
+    return result;
+  });
+
+  let index = 0;
+  for await (const article of results) {
+    const { number, headers } = article!;
+    const date = headers.get("date")!;
+    const from = headers.get("from")!;
+    const newsgroups = headers.get("newsgroups")!;
+    const subject = headers.get("subject")!;
+    const id = headers.get("message-id")!;
+    const bytes = headers.get("bytes")!;
+
+    // Wraps with a `<file>` node if it's the first article (with number 1).
+    if (number === 1) {
+      // However, if this is not the very first article in the NZB, we need to close previous file.
+      if (index) {
+        await writeln([
+          `    </segments>`,
+          `  </file>`,
+        ]);
+      }
+
+      await writeln([
+        `  <file poster="${escape(from)}" date="${
+          (+new Date(date)) / 1000
+        }" subject="${escape(subject)}">`,
+        `    <groups>`,
+        `${
+          newsgroups.split(",").map((group) =>
+            [
+              `      <group>${group}</group>`,
+            ].join("\n")
+          ).join("\n")
+        }`,
+        `    </groups>`,
+
+        `    <segments>`,
+      ]);
+    }
+
+    await writeln(
+      `      <segment bytes="${bytes}" number="${number}">${
+        id.replace(/<([^>]+)>/, "$1")
+      }</segment>`,
+    );
+
+    progress.render(index++);
+  }
+
+  await writeln([
+    `    </segments>`,
+    `  </file>`,
+    `</nzb>`,
+  ]);
 }
 
-function setDefaults(headers: Headers, defaults: Record<string, string> = {}) {
-  Object.entries(defaults)
-    .filter(([_k, v]) => v)
-    .forEach(([k, v]) => {
-      const header = headers.get(k);
-      if (!header || header === "undefined") {
-        headers.set(k, v);
-      }
-    });
+function escape(html: string): string {
+  return html.replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
 }

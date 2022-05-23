@@ -6,8 +6,8 @@ import {
   serve as serveHttp,
 } from "./deps.ts";
 
-import { File, NZB } from "./nzb.ts";
-import { extract } from "./nzb-extract.ts";
+import { File, NZB } from "./model.ts";
+import { extract } from "./extract.ts";
 
 const parseOptions = {
   string: [

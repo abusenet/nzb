@@ -1,6 +1,6 @@
-import { mirror } from "./nzb-mirror.ts";
-import { extract } from "./nzb-extract.ts";
-import { serve } from "./nzb-serve.ts";
+import { mirror } from "./mirror.ts";
+import { extract } from "./extract.ts";
+import { serve } from "./serve.ts";
 
 const exports = {
   mirror,
