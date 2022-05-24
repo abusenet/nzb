@@ -149,14 +149,14 @@ export async function mirror(args = Deno.args) {
   }
 
   const files = nzb.files;
-  let filenum = 0;
+  let filenum = 1;
   const results = pooledMap(connections, nzb.articles(), async (article) => {
     const {
       name: filename,
       size: filesize,
       lastModified,
       segments,
-    } = files.at(filenum)!;
+    } = files.at(filenum - 1)!;
     const { headers, number } = article;
     let newSubject = headers.get("subject")!;
     const bytes = headers.get("bytes")!;
@@ -224,6 +224,10 @@ export async function mirror(args = Deno.args) {
       }
     }
 
+    if (number === segments.length) {
+      filenum++;
+    }
+
     const result = await mirrorArticle(
       article,
       new Article({
@@ -246,10 +250,6 @@ export async function mirror(args = Deno.args) {
     );
 
     result!.number = number;
-
-    if (number === segments.length) {
-      filenum++;
-    }
 
     return result;
   });
