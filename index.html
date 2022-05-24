@@ -10,7 +10,7 @@
     <main>
       <h1>Index of
         ${
-          this.name.split("/").map((path, index, array) => {
+          name.split("/").map((path, index, array) => {
             if (path === "") return "";
             const link = array.slice(0, index + 1).join("/");
             return `<a href="${ link }">${ path }</a>`;
@@ -30,7 +30,7 @@
         </thead>
         <tbody>
           ${
-          this.files.map((file) => `
+          files.map((file) => `
           <tr>
             <td>
               <input type="checkbox" name="files" value="${ file.name }" form="bulk" />
@@ -39,7 +39,7 @@
               ${ file.name }
             </td>
             <td>
-              ${ this.prettyBytes(file.size) }
+              ${ prettyBytes(file.size) }
             </td>
             <td>
               ${ file.poster }

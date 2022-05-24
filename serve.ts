@@ -91,10 +91,9 @@ export async function serve(args = Deno.args) {
     const templateText = await fetch(new URL(template, import.meta.url)).then(
       (res) => res.text(),
     );
-    const render = new Function("return `" + templateText + "`");
 
     const page = new TextEncoder().encode(
-      render.call({
+      templatized(templateText, {
         name: nzb.name!,
         files: nzb.files,
         prettyBytes,
@@ -107,4 +106,17 @@ export async function serve(args = Deno.args) {
 
 function escapeRegExp(string: string) {
   return string.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"); // $& means the whole matched string
+}
+
+function templatized(template: string, assigns = {}) {
+  const handler = new Function(
+    "assigns",
+    [
+      "const tagged = ( " + Object.keys(assigns).join(", ") + " ) =>",
+      "`" + template + "`",
+      "return tagged(...Object.values(assigns))",
+    ].join("\n"),
+  );
+
+  return handler(assigns);
 }
