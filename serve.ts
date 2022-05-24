@@ -8,6 +8,7 @@ import {
 
 import { NZB } from "./model.ts";
 import { extract } from "./extract.ts";
+import { templatized } from "./util.ts";
 
 const parseOptions = {
   string: [
@@ -106,17 +107,4 @@ export async function serve(args = Deno.args) {
 
 function escapeRegExp(string: string) {
   return string.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"); // $& means the whole matched string
-}
-
-function templatized(template: string, assigns = {}) {
-  const handler = new Function(
-    "assigns",
-    [
-      "const tagged = ( " + Object.keys(assigns).join(", ") + " ) =>",
-      "`" + template + "`",
-      "return tagged(...Object.values(assigns))",
-    ].join("\n"),
-  );
-
-  return handler(assigns);
 }

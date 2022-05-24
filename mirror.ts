@@ -1,8 +1,16 @@
 #!/usr/bin/env -S deno run --allow-net --allow-env --allow-read --allow-write
-import { Article, parseFlags, pooledMap, ProgressBar } from "./deps.ts";
+import {
+  Article,
+  basename,
+  parseFlags,
+  pooledMap,
+  prettyBytes,
+  ProgressBar,
+} from "./deps.ts";
 
 import { NZB } from "./model.ts";
 import { mirrorArticle } from "./mirrorArticle.ts";
+import { templatized } from "./util.ts";
 
 const parseOptions = {
   string: [
@@ -15,11 +23,16 @@ const parseOptions = {
     "reconnect-delay",
     "request-retries",
     "post-retry-delay",
+
+    "comment",
+    "comment2",
     "subject",
+
     "from",
     "groups",
     "date",
     "message-id", // Format of generated Message-ID. Default to `${uuid}@nntp`
+
     "out",
   ],
   alias: {
@@ -28,9 +41,12 @@ const parseOptions = {
     "username": ["user", "u"],
     "password": ["passw", "p"],
     "connections": "n",
+
+    "comment": "t",
     "subject": "s",
     "from": "f",
     "groups": "g",
+
     "out": "o",
   },
   default: {
@@ -56,6 +72,9 @@ export async function mirror(args = Deno.args) {
   let {
     _: [filename],
     connections,
+    comment = "",
+    comment2 = "",
+    subject = "",
     from,
     groups,
     date,
@@ -128,22 +147,89 @@ export async function mirror(args = Deno.args) {
     ]);
   }
 
+  const files = nzb.files;
+  let filenum = 0;
   const results = pooledMap(connections, nzb.articles(), async (article) => {
+    const {
+      name: filename,
+      size: filesize,
+      lastModified,
+      segments,
+    } = files.at(filenum)!;
+    const { headers, number } = article;
+    let newSubject = headers.get("subject")!;
+    const bytes = headers.get("bytes")!;
+
+    if (subject) {
+      const params: Record<string, string | number> = {
+        /** Current file number in collection */
+        filenum,
+        /** Current file number in collection, pre-padded with 0's */
+        "0filenum": `${filenum}`.padStart(`${files.length}`.length, "0"),
+        /** Number of files in collection */
+        files: files.length,
+        /** File's name */
+        filename,
+        /** File's name without extension */
+        fnamebase: basename(filename),
+        /** File's size in bytes */
+        filesize,
+        /** File's size in KiB, rounded to 2dp */
+        fileksize: (filesize / 1000).toFixed(2),
+        /** File's size in MiB, rounded to 2dp */
+        filemsize: (filesize / 1000 / 1000).toFixed(2),
+        /** File's size in GiB, rounded to 2dp */
+        filegsize: (filesize / 1000 / 1000 / 1000).toFixed(2),
+        /** File's size in TiB, rounded to 2dp */
+        filetsize: (filesize / 1000 / 1000 / 1000 / 1000).toFixed(2),
+        /** Friendly formatted file size, e.g. '4.85 MiB' or '35.1 GiB' */
+        fileasize: prettyBytes(filesize),
+        /** Article part number */
+        part: number as number,
+        /** Article part number, pre-padded with 0's to be as long as {parts} */
+        "0part": `${number}`.padStart(`${segments.length}`.length, "0"),
+        /** Number of articles for the file */
+        parts: segments.length,
+        /** Article chunk size */
+        size: bytes,
+        /** Value from `--comment` */
+        comment,
+        /** Value from `--comment2` */
+        comment2,
+        /** Unix timestamp of post */
+        timestamp: lastModified / 1000,
+      };
+
+      newSubject = templatized(subject, { rand }).replace(
+        /{(.*?)}/g,
+        (_match, name: string) => `${params[name]}`,
+      );
+    }
+
     const result = await mirrorArticle(
       article,
       new Article({
         headers: {
+          /** Uses the new `date` if any. */
           date,
+          /** Uses the `from` flag if any. */
           from,
-          bytes: article.headers.get("bytes")!,
+          /** Bytes header remains the same. */
+          bytes,
+          /** Uses the `groups` flag if any. */
           newsgroups: groups,
-          subject: article.headers.get("subject")!,
+          /** Transforms subject from template specified in `subject` flag if any. */
+          subject: newSubject,
         },
       }),
       options,
     );
 
-    result!.number = article.number;
+    result!.number = number;
+
+    if (number === segments.length) {
+      filenum++;
+    }
 
     return result;
   });
@@ -208,4 +294,20 @@ function escape(html: string): string {
     .replace(/>/g, "&gt;")
     .replace(/"/g, "&quot;")
     .replace(/'/g, "&#39;");
+}
+
+/**
+ * Generates a random string of N length.
+ */
+function rand(n: number): string {
+  const array = new Uint8Array((n || 40) / 2);
+  crypto.getRandomValues(array);
+  return Array.from(array, dec2hex).join("");
+}
+
+/**
+ * Converts decimal to hex string.
+ */
+function dec2hex(dec: number): string {
+  return dec.toString(16).padStart(2, "0");
 }
