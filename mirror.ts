@@ -2,6 +2,7 @@
 import {
   Article,
   basename,
+  extname,
   parseFlags,
   pooledMap,
   prettyBytes,
@@ -88,10 +89,42 @@ export async function mirror(args = Deno.args) {
     return;
   }
 
+  const nzb = await NZB.from(
+    await Deno.open(filename as string),
+    filename as string,
+  );
+  const { name, size, head, files } = nzb;
+
   let output: Deno.Writer;
   if (out === "-") {
     output = Deno.stdout;
   } else if (typeof out === "string") {
+    const params: Record<string, string | number> = {
+      /** Number of files in collection */
+      files: files.length,
+      /** File's name */
+      filename: name!,
+      /** File's name without extension */
+      fnamebase: basename(name!, extname(name!)),
+      /** File's size in bytes */
+      filesize: size,
+      /** File's size in KiB, rounded to 2dp */
+      fileksize: (size / 1000).toFixed(2),
+      /** File's size in MiB, rounded to 2dp */
+      filemsize: (size / 1000 / 1000).toFixed(2),
+      /** File's size in GiB, rounded to 2dp */
+      filegsize: (size / 1000 / 1000 / 1000).toFixed(2),
+      /** File's size in TiB, rounded to 2dp */
+      filetsize: (size / 1000 / 1000 / 1000 / 1000).toFixed(2),
+      /** Friendly formatted file size, e.g. '4.85 MiB' or '35.1 GiB' */
+      fileasize: prettyBytes(size),
+    };
+
+    out = out.replace(
+      /{(.*?)}/g,
+      (_0: string, name: string) => `${params[name]}`,
+    );
+
     output = await Deno.open(out, {
       read: false,
       write: true,
@@ -104,8 +137,6 @@ export async function mirror(args = Deno.args) {
   if (date === "now") {
     date = new Date().toUTCString();
   }
-
-  const nzb = await NZB.from(await Deno.open(filename as string));
 
   const total = nzb.segments;
   const progress = new ProgressBar({
@@ -129,7 +160,7 @@ export async function mirror(args = Deno.args) {
   }
 
   /** Writes head lines first if any. */
-  const headlines = Object.entries(nzb.head).map(([type, value]) =>
+  const headlines = Object.entries(head).map(([type, value]) =>
     [
       `    <meta type="${type}">${value}</meta>`,
     ].join("\n")
@@ -149,7 +180,6 @@ export async function mirror(args = Deno.args) {
     ]);
   }
 
-  const files = nzb.files;
   let filenum = 1;
   const results = pooledMap(connections, nzb.articles(), async (article) => {
     const {
@@ -174,7 +204,7 @@ export async function mirror(args = Deno.args) {
         /** File's name */
         filename,
         /** File's name without extension */
-        fnamebase: basename(filename),
+        fnamebase: basename(filename, extname(filename)),
         /** File's size in bytes */
         filesize,
         /** File's size in KiB, rounded to 2dp */

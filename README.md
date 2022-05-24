@@ -43,6 +43,19 @@ nzb mirror \
   --out=mirror.nzb # Path to a file to write new NZB to.
 ```
 
+If `--out` is supplied, will write NZB to this file. Can be '-' which writes the
+NZB to `stdout`. The following placeholders are also supported (see below for
+details):
+
+```
+{files}
+{filename}
+{fnamebase}
+{filesize}
+{fileksize} also {filemsize} etc
+{fileasize}
+```
+
 ### Placeholders
 
 The following placeholders can be used in `--subject` and `--message-id` flags.

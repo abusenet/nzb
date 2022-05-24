@@ -35,6 +35,7 @@ export class NZB implements Iterable<File> {
   readonly files: File[] = [];
   #segments = 0;
   name?: string;
+  size = 0;
 
   static async from(reader: Deno.Reader, name?: string): Promise<NZB> {
     const nzb = new NZB(reader, name);
@@ -125,6 +126,8 @@ export class NZB implements Iterable<File> {
         if (!file.size) {
           file.size = file.segments.reduce((sum, { bytes }) => sum + bytes, 0);
         }
+
+        this.size += file.size;
       }
     });
 
