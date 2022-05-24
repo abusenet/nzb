@@ -78,6 +78,7 @@ export async function mirror(args = Deno.args) {
     from,
     groups,
     date,
+    ["message-id"]: messageId,
     out,
   } = options;
 
@@ -159,8 +160,9 @@ export async function mirror(args = Deno.args) {
     const { headers, number } = article;
     let newSubject = headers.get("subject")!;
     const bytes = headers.get("bytes")!;
+    let newMessageId = "";
 
-    if (subject) {
+    if (subject || messageId) {
       const params: Record<string, string | number> = {
         /** Current file number in collection */
         filenum,
@@ -200,10 +202,26 @@ export async function mirror(args = Deno.args) {
         timestamp: lastModified / 1000,
       };
 
-      newSubject = templatized(subject, { rand }).replace(
-        /{(.*?)}/g,
-        (_match, name: string) => `${params[name]}`,
-      );
+      const assigns = { rand };
+      const replacer = (_match: string, name: string) => `${params[name]}`;
+
+      if (subject) {
+        newSubject = templatized(subject, assigns).replace(
+          /{(.*?)}/g,
+          replacer,
+        );
+      }
+
+      if (messageId) {
+        newMessageId = templatized(messageId, assigns).replace(
+          /{(.*?)}/g,
+          replacer,
+        );
+
+        if (!/^<.*>$/.test(newMessageId)) {
+          newMessageId = `<${newMessageId}>`;
+        }
+      }
     }
 
     const result = await mirrorArticle(
@@ -220,6 +238,8 @@ export async function mirror(args = Deno.args) {
           newsgroups: groups,
           /** Transforms subject from template specified in `subject` flag if any. */
           subject: newSubject,
+          /** Transforms message-id from template specified in `message-d` flag if any. */
+          "message-id": newMessageId,
         },
       }),
       options,
