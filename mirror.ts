@@ -89,9 +89,9 @@ export async function mirror(args = Deno.args) {
   }
 
   let output: Deno.Writer;
-  if (!out || out === "-") {
+  if (out === "-") {
     output = Deno.stdout;
-  } else {
+  } else if (typeof out === "string") {
     output = await Deno.open(out, {
       read: false,
       write: true,
@@ -119,6 +119,7 @@ export async function mirror(args = Deno.args) {
   const encoder = new TextEncoder();
 
   function writeln(lines: string | string[], ending = "\n"): Promise<number> {
+    if (!output) return Promise.resolve(0);
     if (!Array.isArray(lines)) {
       lines = [lines];
     }
