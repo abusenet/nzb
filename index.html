@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta http-equiv="X-UA-Compatible" content="ie=edge" />
+    <title>NZB Server</title>
+  </head>
+  <body>
+    <main>
+      <h1>Index of
+        ${
+          this.name.split("/").map((path, index, array) => {
+            if (path === "") return "";
+            const link = array.slice(0, index + 1).join("/");
+            return `<a href="${ link }">${ path }</a>`;
+          }).join("/")
+        }
+      </h1>
+
+      <table cellpadding="6">
+        <thead>
+          <tr>
+            <td></td>
+            <th>Name</th>
+            <th>Size</th>
+            <th>Poster</th>
+            <th>Last Modified Date</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${
+          this.files.map((file) => `
+          <tr>
+            <td>
+              <input type="checkbox" name="files" value="${ file.name }" form="bulk" />
+            </td>
+            <td>
+              ${ file.name }
+            </td>
+            <td>
+              ${ this.prettyBytes(file.size) }
+            </td>
+            <td>
+              ${ file.poster }
+            </td>
+            <td>
+              ${ new Date(file.lastModified).toUTCString() }
+            </td>
+          </tr>
+          `).join("")
+          }
+        </tbody>
+        <tfoot>
+          <tr>
+            <td>
+              <form id="bulk">
+                <button type="submit" formmethod="POST" formaction="/?action=extract">Extract</button>
+              </form>
+            </td>
+          </tr>
+        </tfoot>
+      </table>
+    </main>
+  </body>
+</html>

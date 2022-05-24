@@ -57,5 +57,18 @@ Serves the files specified in an input NZB file as a directory listing.
 nzb serve \
   --hostname=0.0.0.0 \
   --port=8000 \
-  source.nzb \ # Source NZB file to serve.
+  source.nzb # Source NZB file to serve.
 ```
+
+A [basic listing template](./index.html) is used when serving. If a custom
+template is required, specify its full path with `--template` flag.
+
+```shell
+nzb serve \
+  --hostname=0.0.0.0 \
+  --port=8000 \
+  --template=~/custom.html
+  source.nzb # Source NZB file to serve.
+```
+
+This can be useful to display files in the NZB creatively.
