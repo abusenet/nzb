@@ -9,12 +9,32 @@ using the pre-built binaries for each platforms in Releases.
 
 ## Commands
 
-- [x] `nzb mirror`: Mirrors articles in a NZB file with new information
 - [ ] `nzb get`: Downloads data specified in a NZB file.
 - [x] `nzb extract`: Extracts files in a NZB file into new NZB files.
-- [ ] `nzb merge`: Merges multiple NZB files into one.
+- [x] `nzb merge`: Merges multiple NZB files into one.
+- [x] `nzb mirror`: Mirrors articles in a NZB file with new information
 - [x] `nzb serve`: Serves a NZB file as an index webpage.
 - [ ] `nzb stream`: Streams data specified in a NZB file.
+
+## `nzb-extract`
+
+Extracts only certain files in the input NZB based on a Glob or RegExp. The
+resulting NZB is written to `stdout` or a file specifiied in `--out` flag.
+
+```shell
+nzb extract source.nzb "*.part*.rar" > parts.nzb
+nzb extract source.nzb ".*\.part[\d]+\.rar" --out parts.nzb
+```
+
+## `nzb-merge`
+
+Merges one or more NZBs into one. The resulting NZB is written to `stdout` or a
+file specifiied in `--out` flag.
+
+```shell
+nzb merge source.S01D* > S01.nzb
+nzb merge source.S01D* --out S01.nzb
+```
 
 ## `nzb-mirror`
 
@@ -84,16 +104,6 @@ The following placeholders can be used in `--subject` and `--message-id` flags.
 {comment2}  Value from `--comment2`
 {timestamp} Unix timestamp of post
 ${rand(N)}  Random text, N characters long
-```
-
-## `nzb-extract`
-
-Extracts only certain files in the input NZB based on a Glob or RegExp. The
-resulting NZB is written to `stdout` or a file specifiied in `--out` flag.
-
-```shell
-nzb extract source.nzb "*.part*.rar" > parts.nzb
-nzb extract source.nzb ".*\.part[\d]+\.rar" --out parts.nzb
 ```
 
 ## `nzb-serve`

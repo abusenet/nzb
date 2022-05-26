@@ -1,10 +1,12 @@
-import { mirror } from "./mirror.ts";
 import { extract } from "./extract.ts";
+import { merge } from "./extract.ts";
+import { mirror } from "./mirror.ts";
 import { serve } from "./serve.ts";
 
 const exports = {
-  mirror,
   extract,
+  merge,
+  mirror,
   serve,
 };
 
