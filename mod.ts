@@ -1,5 +1,5 @@
 import { extract } from "./extract.ts";
-import { merge } from "./extract.ts";
+import { merge } from "./merge.ts";
 import { mirror } from "./mirror.ts";
 import { serve } from "./serve.ts";
 
