@@ -138,13 +138,12 @@ export async function mirror(args = Deno.args) {
     date = new Date().toUTCString();
   }
 
-  const total = nzb.segments;
   const progress = new ProgressBar({
     title: `Mirroring using ${connections} connections`,
-    total,
+    total: size,
     complete: "=",
     incomplete: "-",
-    display: "[:bar] :completed/:total articles (:percent) - :time",
+    display: "[:bar] :completed/:total (:percent) - :rate/s - :time (ETA :eta)",
   });
 
   const encoder = new TextEncoder();
@@ -285,7 +284,8 @@ export async function mirror(args = Deno.args) {
     return result;
   });
 
-  let index = 0;
+  const startTime = Date.now();
+  let index = 0, completed = 0;
   for await (const article of results) {
     const { number, headers } = article!;
     const date = headers.get("date")!;
@@ -293,7 +293,7 @@ export async function mirror(args = Deno.args) {
     const newsgroups = headers.get("newsgroups")!;
     const subject = headers.get("subject")!;
     const id = headers.get("message-id")!;
-    const bytes = headers.get("bytes")!;
+    const bytes = +headers.get("bytes")!;
 
     // Wraps with a `<file>` node if it's the first article (with number 1).
     if (number === 1) {
@@ -329,7 +329,29 @@ export async function mirror(args = Deno.args) {
       }</segment>`,
     );
 
-    progress.render(index++);
+    completed += bytes;
+    const display = progress.display;
+    // Overrides the progress bar display to pretify numbers.
+    progress.display = display
+      .replace(":completed", prettyBytes(completed))
+      .replace(":total", prettyBytes(size))
+      // Ensures percentages is not over 100%.
+      .replace(
+        ":percent",
+        Math.min((completed / size) * 100, 100).toFixed(2) + "%",
+      )
+      // Displays rate.
+      .replace(
+        ":rate",
+        prettyBytes((completed / (Date.now() - startTime)) * 1000),
+      );
+
+    progress.render(completed, {});
+
+    // Resets the initial display.
+    progress.display = display;
+
+    index++;
   }
 
   await writeln([
