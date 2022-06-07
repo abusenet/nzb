@@ -284,6 +284,16 @@ export async function mirror(args = Deno.args) {
   });
 
   let index = 0, completed = 0;
+
+  // Keeps updating progress every 1s instead of every article done.
+  const progressInterval = setInterval(() => {
+    progress.render(completed, {});
+
+    if (completed >= size) {
+      clearInterval(progressInterval);
+    }
+  }, 1000);
+
   for await (const article of results) {
     const { number, headers } = article!;
     const date = headers.get("date")!;
@@ -328,8 +338,6 @@ export async function mirror(args = Deno.args) {
     );
 
     completed += bytes;
-    progress.render(completed, {});
-
     index++;
   }
 

@@ -55,7 +55,7 @@ export class Progress extends ProgressBar {
     const display = this.display;
     // Overrides the progress bar display to pretify numbers.
     this.display = display
-      .replace(":completed", prettyBytes(completed))
+      .replace(":completed", prettyBytes(Math.min(completed, total)))
       .replace(":total", prettyBytes(total))
       // Ensures percentages is not over 100%.
       .replace(
@@ -75,9 +75,11 @@ export class Progress extends ProgressBar {
       // Pretifies ETA time.
       .replace(
         ":eta",
-        completed >= total
-          ? "0s"
-          : prettySeconds((total / completed - 1) * elapsed / 1000),
+        completed == 0
+          ? "-"
+          : (completed >= total
+            ? "0s"
+            : prettySeconds((total / completed - 1) * elapsed / 1000)),
       );
 
     super.render(completed, options);
