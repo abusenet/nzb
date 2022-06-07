@@ -6,12 +6,11 @@ import {
   parseFlags,
   pooledMap,
   prettyBytes,
-  ProgressBar,
 } from "./deps.ts";
 
 import { NZB } from "./model.ts";
 import { mirrorArticle } from "./mirrorArticle.ts";
-import { templatized } from "./util.ts";
+import { Progress, templatized } from "./util.ts";
 
 const parseOptions = {
   string: [
@@ -138,7 +137,7 @@ export async function mirror(args = Deno.args) {
     date = new Date().toUTCString();
   }
 
-  const progress = new ProgressBar({
+  const progress = new Progress({
     title: `Mirroring using ${connections} connections`,
     total: size,
     complete: "=",
@@ -284,7 +283,6 @@ export async function mirror(args = Deno.args) {
     return result;
   });
 
-  const startTime = Date.now();
   let index = 0, completed = 0;
   for await (const article of results) {
     const { number, headers } = article!;
@@ -311,7 +309,7 @@ export async function mirror(args = Deno.args) {
         }" subject="${escape(subject)}">`,
         `    <groups>`,
         `${
-          newsgroups.split(",").map((group) =>
+          newsgroups.split(",").map((group: string) =>
             [
               `      <group>${group}</group>`,
             ].join("\n")
@@ -330,26 +328,7 @@ export async function mirror(args = Deno.args) {
     );
 
     completed += bytes;
-    const display = progress.display;
-    // Overrides the progress bar display to pretify numbers.
-    progress.display = display
-      .replace(":completed", prettyBytes(completed))
-      .replace(":total", prettyBytes(size))
-      // Ensures percentages is not over 100%.
-      .replace(
-        ":percent",
-        Math.min((completed / size) * 100, 100).toFixed(2) + "%",
-      )
-      // Displays rate.
-      .replace(
-        ":rate",
-        prettyBytes((completed / (Date.now() - startTime)) * 1000),
-      );
-
     progress.render(completed, {});
-
-    // Resets the initial display.
-    progress.display = display;
 
     index++;
   }
