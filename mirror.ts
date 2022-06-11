@@ -6,6 +6,7 @@ import {
   parseFlags,
   pooledMap,
   prettyBytes,
+  readerFromStreamReader,
 } from "./deps.ts";
 
 import { NZB } from "./model.ts";
@@ -34,6 +35,9 @@ const parseOptions = {
     "message-id", // Format of generated Message-ID. Default to `${uuid}@nntp`
 
     "out",
+  ],
+  boolean: [
+    "progress",
   ],
   alias: {
     "hostname": ["host", "h"],
@@ -67,10 +71,15 @@ export function help() {
   return `Usage: nzb-mirror [...flags] <input>`;
 }
 
-export async function mirror(args = Deno.args) {
+/**
+ * Mirrors an NZB to another
+ * @param args List of arguments
+ * @param defaults Optional params that are used as defaults for `args`
+ */
+export async function mirror(args = Deno.args, defaults = {}): Promise<void> {
   const options = parseFlags(args, parseOptions);
   let {
-    _: [filename],
+    _: [input],
     connections,
     comment = "",
     comment2 = "",
@@ -79,23 +88,30 @@ export async function mirror(args = Deno.args) {
     groups,
     date,
     ["message-id"]: messageId,
-    out,
   } = options;
 
-  if (!filename) {
+  const { out, progress, transform = mirrorArticle } = Object.assign(
+    defaults,
+    options,
+  );
+
+  if (!input) {
     console.error("Missing input");
     console.error(help());
     return;
   }
 
+  const file: Response = await fetch(
+    new URL(input as string, import.meta.url),
+  );
   const nzb = await NZB.from(
-    await Deno.open(filename as string),
-    filename as string,
+    readerFromStreamReader(file.body!.getReader()),
+    input as string,
   );
   const { name, size, head, files } = nzb;
 
-  let output: Deno.Writer;
-  if (out === "-") {
+  let output: Deno.Writer & Deno.Closer = out;
+  if (!out || out === "-") {
     output = Deno.stdout;
   } else if (typeof out === "string") {
     const params: Record<string, string | number> = {
@@ -119,12 +135,12 @@ export async function mirror(args = Deno.args) {
       fileasize: prettyBytes(size),
     };
 
-    out = out.replace(
+    const outfile = out.replace(
       /{(.*?)}/g,
       (_0: string, name: string) => `${params[name]}`,
     );
 
-    output = await Deno.open(out, {
+    output = await Deno.open(outfile, {
       read: false,
       write: true,
       create: true,
@@ -137,14 +153,6 @@ export async function mirror(args = Deno.args) {
     date = new Date().toUTCString();
   }
 
-  const progress = new Progress({
-    title: `Mirroring using ${connections} connections`,
-    total: size,
-    complete: "=",
-    incomplete: "-",
-    display: "[:bar] :completed/:total (:percent) - :rate/s - :time (ETA :eta)",
-  });
-
   const encoder = new TextEncoder();
 
   function writeln(lines: string | string[], ending = "\n"): Promise<number> {
@@ -155,6 +163,27 @@ export async function mirror(args = Deno.args) {
     // Filters out undefined lines.
     lines = lines.filter((x) => x);
     return output.write(encoder.encode(lines.join(ending) + ending));
+  }
+
+  let completed = 0; /** Number of bytes posted. */
+  if (progress) {
+    const progressBar = new Progress({
+      title: `Mirroring using ${connections} connections`,
+      total: size,
+      complete: "=",
+      incomplete: "-",
+      display:
+        "[:bar] :completed/:total (:percent) - :rate/s - :time (ETA :eta)",
+    });
+
+    // Keeps updating progress every 1s instead of every article done.
+    const progressInterval = setInterval(() => {
+      progressBar.render(completed, {});
+
+      if (completed >= size) {
+        clearInterval(progressInterval);
+      }
+    }, 1000);
   }
 
   /** Writes head lines first if any. */
@@ -257,7 +286,7 @@ export async function mirror(args = Deno.args) {
       filenum++;
     }
 
-    const result = await mirrorArticle(
+    const result: Article = await transform(
       article,
       new Article({
         headers: {
@@ -283,17 +312,7 @@ export async function mirror(args = Deno.args) {
     return result;
   });
 
-  let index = 0, completed = 0;
-
-  // Keeps updating progress every 1s instead of every article done.
-  const progressInterval = setInterval(() => {
-    progress.render(completed, {});
-
-    if (completed >= size) {
-      clearInterval(progressInterval);
-    }
-  }, 1000);
-
+  let index = 0;
   for await (const article of results) {
     const { number, headers } = article!;
     const date = headers.get("date")!;
@@ -346,6 +365,8 @@ export async function mirror(args = Deno.args) {
     `  </file>`,
     `</nzb>`,
   ]);
+
+  output.close();
 }
 
 function escape(html: string): string {
