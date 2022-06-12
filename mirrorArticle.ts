@@ -69,7 +69,7 @@ async function setup(options: Record<string, string> = {}) {
       const client = await Client.connect({
         hostname,
         port: Number(port),
-        ssl,
+        ssl: !!ssl,
         logLevel: "WARNING",
       });
 
