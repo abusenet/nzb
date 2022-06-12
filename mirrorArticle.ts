@@ -62,13 +62,14 @@ export async function mirrorArticle(
 }
 
 async function setup(options: Record<string, string> = {}) {
-  const { hostname, port, username, password } = options;
+  const { hostname, port, ssl, username, password } = options;
 
   return await retryAsync(
     async () => {
       const client = await Client.connect({
         hostname,
         port: Number(port),
+        ssl,
         logLevel: "WARNING",
       });
 

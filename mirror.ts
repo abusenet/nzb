@@ -37,11 +37,13 @@ const parseOptions = {
     "out",
   ],
   boolean: [
+    "ssl",
     "progress",
   ],
   alias: {
     "hostname": ["host", "h"],
     "port": "P",
+    "ssl": "S",
     "username": ["user", "u"],
     "password": ["passw", "p"],
     "connections": "n",
