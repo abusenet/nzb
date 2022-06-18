@@ -1,6 +1,6 @@
 #!/usr/bin/env -S deno run --allow-read --allow-write
 import { globToRegExp, isGlob, parseFlags } from "./deps.ts";
-import { File, NZB } from "./model.ts";
+import { File, NZB, Output } from "./model.ts";
 
 const parseOptions = {
   string: [
@@ -34,7 +34,7 @@ export async function extract(args = Deno.args, defaults = {}) {
     ...flags
   } = parseFlags(args, parseOptions);
 
-  const { out } = Object.assign(defaults, flags);
+  let { out, nzb } = Object.assign(defaults, flags);
 
   if (!filename) {
     console.error("Missing input");
@@ -42,7 +42,7 @@ export async function extract(args = Deno.args, defaults = {}) {
     return;
   }
 
-  let output: Deno.Writer & Deno.Closer = out;
+  let output: Output = out;
   if (!out || out === "-") {
     output = Deno.stdout;
   } else if (typeof out === "string") {
@@ -54,9 +54,11 @@ export async function extract(args = Deno.args, defaults = {}) {
     });
   }
 
-  const nzb = await NZB.from(
-    await Deno.open(filename as string),
-  );
+  if (!nzb) {
+    nzb = await NZB.from(
+      await Deno.open(filename as string),
+    );
+  }
 
   let regex: RegExp;
 

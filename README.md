@@ -9,14 +9,14 @@ using the pre-built binaries for each platforms in Releases.
 
 ## Commands
 
-- [ ] `nzb get`: Downloads data specified in a NZB file.
-- [x] `nzb extract`: Extracts files in a NZB file into new NZB files.
-- [x] `nzb merge`: Merges multiple NZB files into one.
-- [x] `nzb mirror`: Mirrors articles in a NZB file with new information
-- [x] `nzb serve`: Serves a NZB file as an index webpage.
-- [ ] `nzb stream`: Streams data specified in a NZB file.
+- [x] `extract`: Extracts files in a NZB file into new NZB files.
+- [x] `get`: Fetches data specified in a NZB file.
+- [x] `merge`: Merges multiple NZB files into one.
+- [x] `mirror`: Mirrors articles in a NZB file with new information
+- [x] `serve`: Serves a NZB file as an index webpage.
+- [ ] `stream`: Streams data specified in a NZB file.
 
-## `nzb-extract`
+## `extract`
 
 Extracts only certain files in the input NZB based on a Glob or RegExp. The
 resulting NZB is written to `stdout` or a file specifiied in `--out` flag.
@@ -26,7 +26,18 @@ nzb extract source.nzb "*.part*.rar" > parts.nzb
 nzb extract source.nzb ".*\.part[\d]+\.rar" --out parts.nzb
 ```
 
-## `nzb-merge`
+## `get`
+
+Fetches segments of specific file in the NZB, yEnc decodes and combines them
+back to original file, and writes them to `stdout` or a file specifiied in
+`--out` flag.
+
+```shell
+nzb get source.nzb test_file.bin > test.bin
+nzb get source.nzb test_file.bin --out test.bin
+```
+
+## `merge`
 
 Merges one or more NZBs into one. The resulting NZB is written to `stdout` or a
 file specifiied in `--out` flag.
@@ -36,7 +47,7 @@ nzb merge source.S01D* > S01.nzb
 nzb merge source.S01D* --out S01.nzb
 ```
 
-## `nzb-mirror`
+## `mirror`
 
 Mirrors the articles in the input NZB, either to the same group or new ones, and
 outputs the resulting NZB to stdout or a specified output file.

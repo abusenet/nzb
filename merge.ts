@@ -1,7 +1,7 @@
 #!/usr/bin/env -S deno run --allow-read --allow-write
 import { parseFlags } from "./deps.ts";
 
-import { NZB } from "./model.ts";
+import { NZB, Output } from "./model.ts";
 
 const parseOptions = {
   string: [
@@ -34,7 +34,7 @@ export async function merge(args = Deno.args, defaults = {}) {
     return;
   }
 
-  let output: Deno.Writer & Deno.Closer = out;
+  let output: Output = out;
   if (!out || out === "-") {
     output = Deno.stdout;
   } else if (typeof out === "string") {

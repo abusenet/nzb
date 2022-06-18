@@ -17,9 +17,14 @@ export interface File {
 
 export interface Segment {
   id: string;
-  bytes: number;
+  size: number;
   number: number;
 }
+
+/** Output type for most of the commands. */
+export type Output = Deno.Writer & Deno.Closer & {
+  readonly writable: WritableStream<Uint8Array>;
+};
 
 function escape(html: string): string {
   return html.replace(/&/g, "&amp;")
@@ -73,7 +78,7 @@ export class NZB implements Iterable<File> {
         const file: File = this.files.at(-1)!;
         file.segments.push({
           id: text,
-          bytes: Number(
+          size: Number(
             attributes.find((attr) => attr.qName === "bytes")!.value,
           ),
           number: Number(
@@ -124,7 +129,7 @@ export class NZB implements Iterable<File> {
         // If not, sums the bytes of all its segments.
         const file: File = this.files.at(-1)!;
         if (!file.size) {
-          file.size = file.segments.reduce((sum, { bytes }) => sum + bytes, 0);
+          file.size = file.segments.reduce((sum, { size }) => sum + size, 0);
         }
 
         this.size += file.size;
@@ -133,6 +138,10 @@ export class NZB implements Iterable<File> {
 
     // Starts parsing.
     return parser.parse(reader);
+  }
+
+  file(name: string) {
+    return this.files.find((file) => file.name === name);
   }
 
   [Symbol.iterator](): Iterator<File> {
@@ -152,7 +161,7 @@ export class NZB implements Iterable<File> {
                 files[currentFile];
               const total = segments.length;
               if (currentSegment <= (total - 1)) {
-                const { id, number, bytes } = segments[currentSegment++];
+                const { id, number, size } = segments[currentSegment++];
                 const article = new Article({
                   headers: {
                     "from": poster,
@@ -165,7 +174,7 @@ export class NZB implements Iterable<File> {
                     ),
                     "newsgroups": groups.join(","),
                     "message-id": `<${id}>`,
-                    "bytes": `${bytes}`,
+                    "bytes": `${size}`,
                   },
                 });
                 article.number = number;
@@ -219,9 +228,9 @@ export class NZB implements Iterable<File> {
 
             `    <segments>`,
             `${
-              segments.map(({ id, bytes, number }) =>
+              segments.map(({ id, size, number }) =>
                 [
-                  `      <segment bytes="${bytes}" number="${number}">${id}</segment>`,
+                  `      <segment bytes="${size}" number="${number}">${id}</segment>`,
                 ].join("\n")
               ).join("\n")
             }`,

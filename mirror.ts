@@ -9,7 +9,7 @@ import {
   readerFromStreamReader,
 } from "./deps.ts";
 
-import { NZB } from "./model.ts";
+import { NZB, Output } from "./model.ts";
 import { mirrorArticle } from "./mirrorArticle.ts";
 import { Progress, templatized } from "./util.ts";
 
@@ -112,7 +112,7 @@ export async function mirror(args = Deno.args, defaults = {}): Promise<void> {
   );
   const { name, size, head, files } = nzb;
 
-  let output: Deno.Writer & Deno.Closer = out;
+  let output: Output = out;
   if (!out || out === "-") {
     output = Deno.stdout;
   } else if (typeof out === "string") {
