@@ -117,14 +117,13 @@ The following placeholders can be used in `--subject` and `--message-id` flags.
 ${rand(N)}  Random text, N characters long
 ```
 
-## `nzb-serve`
+## `serve`
 
 Serves the files specified in an input NZB file as a directory listing.
 
 ```shell
 nzb serve \
-  --hostname=0.0.0.0 \
-  --port=8000 \
+  --addr=0.0.0.0:8000 \
   source.nzb # Source NZB file to serve.
 ```
 
@@ -133,10 +132,12 @@ template is required, specify its full path with `--template` flag.
 
 ```shell
 nzb serve \
-  --hostname=0.0.0.0 \
-  --port=8000 \
+  --addr=0.0.0.0:8000 \
   --template=~/custom.html
   source.nzb # Source NZB file to serve.
 ```
 
 This can be useful to display files in the NZB creatively.
+
+Each files in the NZB has a route to fetch it via the browser. Regular files are
+downloaded, whereas media files are streamed if browser supports.
