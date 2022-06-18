@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta http-equiv="X-UA-Compatible" content="ie=edge" />
     <title>NZB Server</title>
+    <link rel="icon" href='data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg"/>' />
   </head>
   <body>
     <main>
@@ -36,7 +37,7 @@
               <input type="checkbox" name="files" value="${ file.name }" form="bulk" />
             </td>
             <td>
-              ${ file.name }
+              <a href="./${ file.name }">${ file.name }</a>
             </td>
             <td>
               ${ prettyBytes(file.size) }

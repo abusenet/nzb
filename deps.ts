@@ -15,6 +15,8 @@ export {
   globToRegExp,
   isGlob,
 } from "https://deno.land/std@0.144.0/path/glob.ts";
+export { contentType } from "https://deno.land/std@0.144.0/media_types/mod.ts";
+export { encode } from "https://deno.land/std@0.144.0/encoding/hex.ts";
 
 export { ElementInfo, SAXParser } from "https://deno.land/x/xmlp@v0.3.0/mod.ts";
 export { Article, Client } from "https://deno.land/x/nntp@v0.5.0/mod.ts";
