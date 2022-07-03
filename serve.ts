@@ -142,8 +142,8 @@ async function serveDirIndex(
     return new Response(readable, { status, headers });
   }
 
-  headers.set("Content-type", "text/html");
-  // Set "accept-ranges" so that the client knows it can make range requests on future requests
+  headers.set("Content-Type", "text/html");
+  // Set "Accept-Ranges" so that the client knows it can make range requests on future requests
   headers.set("Accept-Ranges", "bytes");
   headers.set("Date", new Date().toUTCString());
 
@@ -169,16 +169,19 @@ async function serveFile(
   options: Record<string, string | number | boolean> = {},
 ): Promise<Response> {
   const headers = new Headers();
-  headers.set("date", new Date().toUTCString());
+  // Set "Accept-Ranges" so that the client knows it can make range requests on future requests
+  headers.set("Accept-Ranges", "bytes");
+  headers.set("Date", new Date().toUTCString());
 
   // Set mime-type using the file extension in filePath
   const contentTypeValue = contentType(extname(file.name));
   if (contentTypeValue) {
-    headers.set("content-type", contentTypeValue);
+    headers.set("Content-Type", contentTypeValue);
   }
 
   let status = Status.OK;
   const responseInit: ResponseInit = { headers };
+  // Custom getter for status code and text.
   Object.defineProperties(responseInit, {
     status: {
       get() {
@@ -201,7 +204,7 @@ async function serveFile(
   // Set last modified header
   if (file.lastModified) {
     const lastModified = new Date(file.lastModified);
-    headers.set("last-modified", lastModified.toUTCString());
+    headers.set("Last-Modified", lastModified.toUTCString());
 
     // Create a simple etag that is an md5 of the last modified date and filesize concatenated
     const simpleEtag = await createEtagHash(
@@ -226,7 +229,38 @@ async function serveFile(
     }
   }
 
-  headers.set("content-length", `${file.size}`);
+  // Get and parse the "range" header
+  const range = request.headers.get("range") as string;
+  const rangeRe = /bytes=(\d+)-(\d+)?/;
+  const parsed = rangeRe.exec(range);
+
+  // Use the parsed value if available, fallback to the start and end of the entire file
+  const start = parsed && parsed[1] ? +parsed[1] : 0;
+  const end = parsed && parsed[2] ? +parsed[2] : file.size - 1;
+
+  // If there is a range, set the status to 206, and set the "Content-Range" header.
+  if (range && parsed) {
+    headers.set("Content-Range", `bytes ${start}-${end}/${file.size}`);
+  }
+
+  // Return 416 if `start` isn't less than or equal to `end`, or `start` or `end` are greater than the file's size
+  const maxRange = file.size - 1;
+
+  if (
+    range &&
+    (!parsed ||
+      typeof start !== "number" ||
+      start > end ||
+      start > maxRange ||
+      end > maxRange)
+  ) {
+    status = Status.RequestedRangeNotSatisfiable;
+    return new Response(responseInit.statusText, responseInit);
+  }
+
+  // Set content length
+  const contentLength = end - start + 1;
+  headers.set("Content-Length", `${contentLength}`);
 
   if (request.method === "HEAD") {
     return new Response(null, responseInit);
@@ -252,9 +286,15 @@ async function serveFile(
 
   get(argv, {
     file,
+    start,
+    end,
     out: stream,
     ...options,
   });
+
+  if (range && parsed) {
+    status = Status.PartialContent;
+  }
 
   return new Response(stream.readable, responseInit);
 }
