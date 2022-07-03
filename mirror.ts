@@ -6,12 +6,11 @@ import {
   parseFlags,
   pooledMap,
   prettyBytes,
-  readerFromStreamReader,
 } from "./deps.ts";
 
-import { NZB, Output } from "./model.ts";
+import { Output } from "./model.ts";
 import { mirrorArticle } from "./mirrorArticle.ts";
-import { Progress, templatized } from "./util.ts";
+import { fetchNZB, Progress, templatized } from "./util.ts";
 
 const parseOptions = {
   string: [
@@ -103,13 +102,7 @@ export async function mirror(args = Deno.args, defaults = {}): Promise<void> {
     return;
   }
 
-  const file: Response = await fetch(
-    new URL(input as string, import.meta.url),
-  );
-  const nzb = await NZB.from(
-    readerFromStreamReader(file.body!.getReader()),
-    input as string,
-  );
+  const nzb = await fetchNZB(input as string);
   const { name, size, head, files } = nzb;
 
   let output: Output = out;

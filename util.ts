@@ -1,4 +1,18 @@
-import { prettyBytes, ProgressBar } from "./deps.ts";
+import { prettyBytes, ProgressBar, readerFromStreamReader } from "./deps.ts";
+import { NZB } from "./model.ts";
+
+/**
+ * Fetches a NZB file from the given URL.
+ */
+export async function fetchNZB(input: string) {
+  const file: Response = await fetch(
+    new URL(input, import.meta.url),
+  );
+  return NZB.from(
+    readerFromStreamReader(file.body!.getReader()),
+    input,
+  );
+}
 
 export function templatized(template: string, assigns = {}): string {
   const handler = new Function(

@@ -9,6 +9,7 @@ export {
   Status,
   STATUS_TEXT,
 } from "https://deno.land/std@0.144.0/http/mod.ts";
+export type { ConnInfo } from "https://deno.land/std@0.144.0/http/mod.ts";
 export { basename, extname } from "https://deno.land/std@0.144.0/path/mod.ts";
 export { prettyBytes } from "https://deno.land/std@0.144.0/fmt/bytes.ts";
 export {

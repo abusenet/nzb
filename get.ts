@@ -6,7 +6,8 @@ import {
   YEncDecoderStream,
 } from "./deps.ts";
 
-import { File, NZB, Output } from "./model.ts";
+import { NZB, Output } from "./model.ts";
+import { fetchNZB } from "./util.ts";
 
 const encoder = new TextEncoder();
 const CRLF = encoder.encode("\r\n");
@@ -38,6 +39,7 @@ const parseOptions = {
     port: Deno.env.get("NNTP_PORT"),
     username: Deno.env.get("NNTP_USER"),
     password: Deno.env.get("NNTP_PASS"),
+    ssl: Deno.env.get("NNTP_SSL") === "true",
   },
 };
 
@@ -78,10 +80,7 @@ export async function get(args = Deno.args, defaults = {}) {
    */
   if (!file) {
     if (!nzb) {
-      nzb = await NZB.from(
-        await Deno.open(input as string),
-        input as string,
-      );
+      nzb = await fetchNZB(input as string);
     }
 
     file = (nzb as NZB).file(filename as string);
@@ -121,7 +120,7 @@ export async function get(args = Deno.args, defaults = {}) {
   // Note that the boundary of all the segments may be bigger than the range.
   // Instead of storing the segments, we just keep metadata about them, with
   // the additional start and end position relative to the segment.
-  for (const segment of (file as File).segments) {
+  for (const segment of file.segments) {
     size += segment.size;
     if (size < start) {
       continue;

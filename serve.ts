@@ -1,6 +1,7 @@
 #!/usr/bin/env -S deno run --allow-net --allow-read
 import {
   basename,
+  ConnInfo,
   contentType,
   encode,
   extname,
@@ -14,7 +15,9 @@ import {
 import { File, NZB } from "./model.ts";
 import { extract } from "./extract.ts";
 import { get } from "./get.ts";
-import { templatized } from "./util.ts";
+import { fetchNZB, templatized } from "./util.ts";
+
+const DEFAULT_TEMPLATE = "./index.html";
 
 const encoder = new TextEncoder();
 const decoder = new TextDecoder();
@@ -41,7 +44,7 @@ const parseOptions = {
   },
   default: {
     address: "0.0.0.0:8000",
-    template: "./index.html",
+    template: DEFAULT_TEMPLATE,
   },
 };
 
@@ -58,64 +61,74 @@ export function help() {
  */
 export async function serve(args = Deno.args) {
   const {
-    _: [filename],
+    _: [input],
     address,
     template,
     verbose,
     ...flags
   } = parseFlags(args, parseOptions);
 
-  if (!filename) {
+  if (!input) {
     console.error("Missing input");
     console.error(help());
     return;
   }
 
-  const nzb = await NZB.from(
-    await Deno.open(filename as string),
-    filename as string,
-  );
+  const nzb = await fetchNZB(input as string);
 
   const [hostname, port] = address.split(":");
 
-  await serveHttp(async (request: Request): Promise<Response> => {
-    const { pathname } = new URL(request.url);
+  await serveHttp(
+    async (request: Request, conn: ConnInfo): Promise<Response> => {
+      const { pathname, searchParams } = new URL(request.url);
 
-    if (pathname === "/") {
-      const response = await serveDirIndex(request, nzb, {
-        template,
+      if (pathname === "/") {
+        if (!searchParams.has("template")) {
+          searchParams.set("template", template);
+        }
+
+        const response = await serveNZBIndex(request, conn, { nzb });
+
+        if (verbose) {
+          serverLog(request, response.status);
+        }
+
+        return response;
+      }
+
+      const file = nzb.file(pathname.substring(1));
+
+      if (!file) {
+        throw new Deno.errors.NotFound();
+      }
+
+      Object.entries(flags).forEach(([key, value]) => {
+        searchParams.set(key, value);
       });
+
+      const response = await serveFile(request, conn, { nzb, file });
 
       if (verbose) {
         serverLog(request, response.status);
       }
 
       return response;
-    }
-
-    const file = nzb.file(pathname.substring(1));
-
-    if (!file) {
-      throw new Deno.errors.NotFound();
-    }
-
-    const response = await serveFile(request, file!, flags);
-
-    if (verbose) {
-      serverLog(request, response.status);
-    }
-
-    return response;
-  }, { hostname, port: Number(port) });
+    },
+    { hostname, port: Number(port) },
+  );
 }
 
-async function serveDirIndex(
+export async function serveNZBIndex(
   request: Request,
-  nzb: NZB,
-  options: { template: string },
+  _conn: ConnInfo,
+  { nzb }: Record<string, string | NZB>,
 ): Promise<Response> {
-  const name = basename(nzb.name as string, ".nzb");
-  const { searchParams } = new URL(request.url);
+  if (typeof nzb === "string") {
+    nzb = await fetchNZB(nzb);
+  }
+
+  const name = basename(nzb.name as string);
+  const { pathname, searchParams } = new URL(request.url);
   const action = searchParams.get("action");
 
   const headers = new Headers();
@@ -128,7 +141,7 @@ async function serveDirIndex(
     headers.set("Content-Type", "application/x-nzb");
     headers.set(
       "Content-Disposition",
-      `attachment; filename="partial-${name}.nzb"`,
+      `attachment; filename="partial-${name}"`,
     );
 
     const { readable, writable } = new TransformStream();
@@ -136,6 +149,7 @@ async function serveDirIndex(
       nzb.name as string,
       files.map(escapeRegExp).join("|"),
     ], {
+      nzb,
       out: writable.getWriter(),
     });
 
@@ -147,13 +161,15 @@ async function serveDirIndex(
   headers.set("Accept-Ranges", "bytes");
   headers.set("Date", new Date().toUTCString());
 
-  const templateText = await fetch(new URL(options.template, import.meta.url))
+  const template = searchParams.get("template") || DEFAULT_TEMPLATE;
+  const templateText = await fetch(new URL(template, import.meta.url))
     .then(
       (res) => res.text(),
     );
 
   const page = encoder.encode(
     templatized(templateText, {
+      base: pathname === "/" ? "" : pathname,
       name: name,
       files: nzb.files,
       prettyBytes,
@@ -163,11 +179,21 @@ async function serveDirIndex(
   return new Response(page, { status, headers });
 }
 
-async function serveFile(
+export async function serveFile(
   request: Request,
-  file: File,
-  options: Record<string, string | number | boolean> = {},
+  _conn: ConnInfo,
+  { nzb, file }: Record<string, string | NZB | File>,
 ): Promise<Response> {
+  if (typeof file === "string") {
+    if (typeof nzb === "string") {
+      nzb = await fetchNZB(nzb);
+    }
+
+    file = (nzb as NZB).file(file as string) as File;
+  }
+
+  file = file as File;
+
   const headers = new Headers();
   // Set "Accept-Ranges" so that the client knows it can make range requests on future requests
   headers.set("Accept-Ranges", "bytes");
@@ -211,13 +237,13 @@ async function serveFile(
       `${lastModified.toJSON()}${file.size}`,
       "fnv1a",
     );
-    headers.set("etag", simpleEtag);
+    headers.set("ETag", simpleEtag);
 
-    // If a `if-none-match` header is present and the value matches the tag or
-    // if a `if-modified-since` header is present and the value is bigger than
+    // If a `If-None-Match` header is present and the value matches the tag or
+    // if a `If-Modified-Since` header is present and the value is bigger than
     // the access timestamp value, then return 304
-    const ifNoneMatch = request.headers.get("if-none-match");
-    const ifModifiedSince = request.headers.get("if-modified-since");
+    const ifNoneMatch = request.headers.get("If-None-Match");
+    const ifModifiedSince = request.headers.get("If-Modified-Since");
     if (
       (ifNoneMatch && compareEtag(ifNoneMatch, simpleEtag)) ||
       (ifNoneMatch === null &&
@@ -230,7 +256,7 @@ async function serveFile(
   }
 
   // Get and parse the "range" header
-  const range = request.headers.get("range") as string;
+  const range = request.headers.get("Range") as string;
   const rangeRe = /bytes=(\d+)-(\d+)?/;
   const parsed = rangeRe.exec(range);
 
@@ -269,6 +295,8 @@ async function serveFile(
   // Uses a default transform stream that `get` can write to.
   const stream = new TransformStream();
 
+  const { searchParams } = new URL(request.url);
+
   const argv = ["dummy", file.name];
   [
     "hostname",
@@ -277,7 +305,7 @@ async function serveFile(
     "username",
     "password",
   ].forEach((key) => {
-    const value = options[key];
+    const value = searchParams.get(key);
     if (value) {
       argv.push(`--${key}`);
       argv.push(`${value}`);
@@ -289,7 +317,7 @@ async function serveFile(
     start,
     end,
     out: stream,
-    ...options,
+    ...searchParams,
   });
 
   if (range && parsed) {
