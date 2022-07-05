@@ -10,7 +10,7 @@ import {
 
 import { Output } from "./model.ts";
 import { mirrorArticle } from "./mirrorArticle.ts";
-import { fetchNZB, Progress, templatized } from "./util.ts";
+import { fetchNZB, Progress } from "./util.ts";
 
 const parseOptions = {
   string: [
@@ -255,20 +255,25 @@ export async function mirror(args = Deno.args, defaults = {}): Promise<void> {
         timestamp: lastModified / 1000,
       };
 
-      const assigns = { rand };
       const replacer = (_match: string, name: string) => `${params[name]}`;
 
       if (subject) {
-        newSubject = templatized(subject, assigns).replace(
+        newSubject = subject.replace(
           /{(.*?)}/g,
           replacer,
+        ).replace(
+          /\$\{rand\(([\d]+)\)\}/,
+          (_: string, n: string) => rand(Number(n)),
         );
       }
 
       if (messageId) {
-        newMessageId = templatized(messageId, assigns).replace(
+        newMessageId = subject.replace(
           /{(.*?)}/g,
           replacer,
+        ).replace(
+          /\$\{rand\(([\d]+)\)\}/,
+          (_: string, n: string) => rand(Number(n)),
         );
 
         if (!/^<.*>$/.test(newMessageId)) {

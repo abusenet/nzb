@@ -1,4 +1,10 @@
-import { prettyBytes, ProgressBar, readerFromStreamReader } from "./deps.ts";
+import {
+  basename,
+  prettyBytes,
+  ProgressBar,
+  readerFromStreamReader,
+  render,
+} from "./deps.ts";
 import { NZB } from "./model.ts";
 
 /**
@@ -14,17 +20,17 @@ export async function fetchNZB(input: string) {
   );
 }
 
-export function templatized(template: string, assigns = {}): string {
-  const handler = new Function(
-    "assigns",
-    [
-      "const tagged = ( " + Object.keys(assigns).join(", ") + " ) =>",
-      "`" + template + "`",
-      "return tagged(...Object.values(assigns))",
-    ].join("\n"),
-  );
-
-  return handler(assigns);
+export function templatized(
+  template: string,
+  assigns = {},
+  filters = {},
+): Promise<string> {
+  filters = Object.assign({
+    basename,
+    prettyBytes,
+    UTCString: (date: string | number | Date) => new Date(date).toUTCString(),
+  }, filters);
+  return render(template, assigns, filters);
 }
 
 /**

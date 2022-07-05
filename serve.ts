@@ -6,7 +6,6 @@ import {
   encode,
   extname,
   parseFlags,
-  prettyBytes,
   serve as serveHttp,
   Status,
   STATUS_TEXT,
@@ -162,17 +161,16 @@ export async function serveNZBIndex(
   headers.set("Date", new Date().toUTCString());
 
   const template = searchParams.get("template") || DEFAULT_TEMPLATE;
-  const templateText = await fetch(new URL(template, import.meta.url))
+  const templateText = await fetch(new URL(template, import.meta.url).href)
     .then(
       (res) => res.text(),
     );
 
   const page = encoder.encode(
-    templatized(templateText, {
+    await templatized(templateText, {
       base: pathname === "/" ? "" : pathname,
       name: name,
       files: nzb.files,
-      prettyBytes,
     }),
   );
 

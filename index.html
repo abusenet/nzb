@@ -5,20 +5,12 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta http-equiv="X-UA-Compatible" content="ie=edge" />
     <title>NZB Server</title>
-    <base href="${ base }/"></base>
+    <base href="{{ base }}/"></base>
     <link rel="icon" href='data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg"/>' />
   </head>
   <body>
     <main>
-      <h1>Index of
-        ${
-          name.split("/").map((path, index, array) => {
-            if (path === "") return "";
-            const link = array.slice(0, index + 1).join("/");
-            return `<a href="${ link }">${ path }</a>`;
-          }).join("/")
-        }
-      </h1>
+      <h1>Index of {{ name | basename }}</h1>
 
       <table cellpadding="6">
         <thead>
@@ -31,27 +23,25 @@
           </tr>
         </thead>
         <tbody>
-          ${
-          files.map((file) => `
+          {% for file in files %}
           <tr>
             <td>
-              <input type="checkbox" name="files" value="${ file.name }" form="bulk" />
+              <input type="checkbox" name="files" value="{{ file.name }}" form="bulk" />
             </td>
             <td>
-              <a href="${ file.name }">${ file.name }</a>
+              <a href="{{ file.name }}">{{ file.name }}</a>
             </td>
             <td>
-              ${ prettyBytes(file.size) }
+              {{ file.size | prettyBytes }}
             </td>
             <td>
-              ${ file.poster }
+              {{ file.poster }}
             </td>
             <td>
-              ${ new Date(file.lastModified).toUTCString() }
+              {{ file.lastModified | UTCString }}
             </td>
           </tr>
-          `).join("")
-          }
+          {% endfor %}
         </tbody>
         <tfoot>
           <tr>

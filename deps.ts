@@ -26,3 +26,5 @@ export { YEncDecoderStream } from "https://deno.land/x/yenc@v0.1.0/ystream.ts";
 export { retryAsync } from "https://deno.land/x/retry@v2.0.0/mod.ts";
 
 export { default as ProgressBar } from "https://deno.land/x/progress@v1.2.8/mod.ts";
+
+export { render } from "https://deno.land/x/nano@v0.0.14/mod.ts";
