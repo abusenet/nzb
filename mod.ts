@@ -1,11 +1,11 @@
 import { extract } from "./extract.ts";
-import { merge } from "./merge.ts";
+import { combine } from "./combine.ts";
 import { mirror } from "./mirror.ts";
 import { serve } from "./serve.ts";
 
 const exports = {
+  combine,
   extract,
-  merge,
   mirror,
   serve,
 };

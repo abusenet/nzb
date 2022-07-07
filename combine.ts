@@ -13,14 +13,14 @@ const parseOptions = {
 };
 
 if (import.meta.main) {
-  await merge();
+  await combine();
 }
 
 export function help() {
-  return `Usage: nzb-merge [...flags] <target> ...sources`;
+  return `Usage: nzb-combine [...flags] <target> ...sources`;
 }
 
-export async function merge(args = Deno.args, defaults = {}) {
+export async function combine(args = Deno.args, defaults = {}) {
   const {
     _: [target, ...sources],
     ...flags

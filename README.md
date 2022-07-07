@@ -9,12 +9,21 @@ using the pre-built binaries for each platforms in Releases.
 
 ## Commands
 
+- [x] `combine`: Combines multiple NZB files into one.
 - [x] `extract`: Extracts files in a NZB file into new NZB files.
 - [x] `get`: Fetches data specified in a NZB file.
-- [x] `merge`: Merges multiple NZB files into one.
 - [x] `mirror`: Mirrors articles in a NZB file with new information
 - [x] `serve`: Serves a NZB file as an index webpage.
-- [ ] `stream`: Streams data specified in a NZB file.
+
+## `combine`
+
+Combines one or more NZBs into one. The resulting NZB is written to `stdout` or
+a file specifiied in `--out` flag.
+
+```shell
+nzb combine source.S01D* > S01.nzb
+nzb combine source.S01D* --out S01.nzb
+```
 
 ## `extract`
 
@@ -37,15 +46,7 @@ nzb get source.nzb test_file.bin > test.bin
 nzb get source.nzb test_file.bin --out test.bin
 ```
 
-## `merge`
-
-Merges one or more NZBs into one. The resulting NZB is written to `stdout` or a
-file specifiied in `--out` flag.
-
-```shell
-nzb merge source.S01D* > S01.nzb
-nzb merge source.S01D* --out S01.nzb
-```
+`get` also supports range request with `--start` and/or `--end` flags.
 
 ## `mirror`
 
@@ -141,3 +142,5 @@ This can be useful to display files in the NZB creatively.
 
 Each files in the NZB has a route to fetch it via the browser. Regular files are
 downloaded, whereas media files are streamed if browser supports.
+
+`source.nzb` can be a local or remote URL, and can be gzipped.
