@@ -168,7 +168,7 @@ export async function serveNZBIndex(
 
   const page = encoder.encode(
     await templatized(templateText, {
-      base: pathname === "/" ? "" : pathname,
+      base: pathname.replace(/\/$/, ""),
       name: name,
       files: nzb.files,
     }),
