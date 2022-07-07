@@ -51,6 +51,7 @@ const parseOptions = {
     "subject": "s",
     "from": "f",
     "groups": "g",
+    "messageId": ["message-id"],
 
     "out": "o",
   },
@@ -62,6 +63,9 @@ const parseOptions = {
     password: Deno.env.get("NNTP_PASS"),
     connections: Number(Deno.env.get("NNTP_CONNECTIONS") || 3),
     from: Deno.env.get("NNTP_POSTER") || "poster@example.com",
+    groups: "",
+    date: "",
+    messageId: "",
   },
 };
 
@@ -89,7 +93,7 @@ export async function mirror(args = Deno.args, defaults = {}): Promise<void> {
     from,
     groups,
     date,
-    ["message-id"]: messageId,
+    messageId,
   } = options;
 
   const { out, progress, transform = mirrorArticle } = Object.assign(
@@ -106,7 +110,7 @@ export async function mirror(args = Deno.args, defaults = {}): Promise<void> {
   const nzb = await fetchNZB(input as string);
   const { name, size, head, files } = nzb;
 
-  let output: Output = out;
+  let output: Output;
   if (!out || out === "-") {
     output = Deno.stdout;
   } else if (typeof out === "string") {
@@ -131,7 +135,7 @@ export async function mirror(args = Deno.args, defaults = {}): Promise<void> {
       fileasize: prettyBytes(size),
     };
 
-    const outfile = out.replace(
+    const outfile = (out as string).replace(
       /{(.*?)}/g,
       (_0: string, name: string) => `${params[name]}`,
     );
@@ -142,6 +146,8 @@ export async function mirror(args = Deno.args, defaults = {}): Promise<void> {
       create: true,
       truncate: true,
     });
+  } else {
+    output = out;
   }
 
   // `date` can have the special value 'now' to refer script's start time.
@@ -287,7 +293,7 @@ export async function mirror(args = Deno.args, defaults = {}): Promise<void> {
       filenum++;
     }
 
-    const result: Article = await transform(
+    const result = await transform(
       article,
       new Article({
         headers: {

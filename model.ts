@@ -26,14 +26,6 @@ export type Output = Deno.Writer & Deno.Closer & {
   readonly writable: WritableStream<Uint8Array>;
 };
 
-function escape(html: string): string {
-  return html.replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;")
-    .replace(/'/g, "&#39;");
-}
-
 export class NZB implements Iterable<File> {
   #reader?: Deno.Reader;
   readonly head: Record<string, string> = {};
