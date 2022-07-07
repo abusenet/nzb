@@ -1,5 +1,6 @@
 import {
   basename,
+  extname,
   prettyBytes,
   ProgressBar,
   readerFromStreamReader,
@@ -11,11 +12,15 @@ import { NZB } from "./model.ts";
  * Fetches a NZB file from the given URL.
  */
 export async function fetchNZB(input: string) {
-  const file: Response = await fetch(
-    new URL(input, import.meta.url),
-  );
+  const url = new URL(input, import.meta.url).href;
+  const file: Response = await fetch(url);
+  let body = file.body!;
+  if (extname(url) === ".gz") {
+    body = body.pipeThrough(new DecompressionStream("gzip"));
+  }
+
   return NZB.from(
-    readerFromStreamReader(file.body!.getReader()),
+    readerFromStreamReader(body.getReader()),
     input,
   );
 }
