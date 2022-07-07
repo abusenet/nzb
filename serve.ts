@@ -1,6 +1,7 @@
 #!/usr/bin/env -S deno run --allow-net --allow-read
 import {
   basename,
+  compareEtag,
   ConnInfo,
   contentType,
   encode,
@@ -371,17 +372,4 @@ async function createEtagHash(
   const msgUint8 = encoder.encode(message);
   const hashBuffer = await crypto.subtle.digest(algorithm, msgUint8);
   return decoder.decode(encode(new Uint8Array(hashBuffer)));
-}
-
-function compareEtag(a: string, b: string): boolean {
-  if (a === b) {
-    return true;
-  }
-  if (a.startsWith("W/") && !b.startsWith("W/")) {
-    return a.slice(2) === b;
-  }
-  if (!a.startsWith("W/") && b.startsWith("W/")) {
-    return a === b.slice(2);
-  }
-  return false;
 }

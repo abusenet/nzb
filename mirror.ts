@@ -57,6 +57,7 @@ const parseOptions = {
   default: {
     hostname: Deno.env.get("NNTP_HOSTNAME"),
     port: Deno.env.get("NNTP_PORT"),
+    ssl: Deno.env.get("NNTP_SSL") === "true",
     username: Deno.env.get("NNTP_USER"),
     password: Deno.env.get("NNTP_PASS"),
     connections: Number(Deno.env.get("NNTP_CONNECTIONS") || 3),

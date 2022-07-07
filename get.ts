@@ -2,7 +2,9 @@
 import {
   Client,
   DelimiterStream,
+  endsWith,
   parseFlags,
+  startsWith,
   YEncDecoderStream,
 } from "./deps.ts";
 
@@ -154,15 +156,7 @@ export async function get(args = Deno.args, defaults = {}) {
         // Splits into lines first
         .pipeThrough(new DelimiterStream(CRLF))
         // Removes yEnc header and trailer lines.
-        .pipeThrough(transform((line, controller) => {
-          if (
-            startsWith(line, YBEGIN) || startsWith(line, YPART) ||
-            startsWith(line, YEND)
-          ) {
-            return;
-          }
-          controller.enqueue(line);
-        }))
+        .pipeThrough(skip([YBEGIN, YPART, YEND]))
         // Decodes the yEnc stream.
         .pipeThrough(new YEncDecoderStream())
         // Trims to data within range
@@ -178,31 +172,19 @@ export async function get(args = Deno.args, defaults = {}) {
 }
 
 /**
- * Determines whether a string begins with the characters of a specified string
- * @param line The line to check
- * @param substr The characters to be searched for at the start of this string.
- * @returns `true` if the given characters are found at the beginning of the string; otherwise, `false`.
+ * Creates a TransformStream that skips chunks that match the given patterns.
  */
-function startsWith(line: Uint8Array, substr: Uint8Array): boolean {
-  let length = substr.length;
-  while (length--) {
-    if (line[length] !== substr[length]) {
-      return false;
-    }
-  }
-
-  return true;
-}
-
-/** Helper for creating a simple TransformStream. */
-function transform(
-  transform: TransformStreamDefaultControllerTransformCallback<
-    Uint8Array,
-    Uint8Array
-  >,
-): TransformStream<Uint8Array, Uint8Array> {
+function skip(startWith: Uint8Array[] = [], endWith: Uint8Array[] = []) {
   return new TransformStream({
-    transform,
+    transform(chunk, controller) {
+      if (startWith.some((start) => startsWith(chunk, start))) {
+        return;
+      }
+      if (endWith.some((end) => endsWith(chunk, end))) {
+        return;
+      }
+      controller.enqueue(chunk);
+    },
   });
 }
 
@@ -210,17 +192,19 @@ function transform(
  * Creates a TransformStream that returns chunks within a range.
  */
 function slice(start = 0, end = Number.POSITIVE_INFINITY): TransformStream {
-  return transform((chunk, controller) => {
-    const byteLength = chunk.byteLength;
-    const subchunk = chunk.subarray(
-      clamp(0, start, byteLength),
-      clamp(0, end + 1, byteLength),
-    );
-    start -= byteLength;
-    end -= byteLength;
-    if (subchunk.byteLength > 0) {
-      controller.enqueue(subchunk);
-    }
+  return new TransformStream({
+    transform(chunk, controller) {
+      const byteLength = chunk.byteLength;
+      const subchunk = chunk.subarray(
+        clamp(0, start, byteLength),
+        clamp(0, end + 1, byteLength),
+      );
+      start -= byteLength;
+      end -= byteLength;
+      if (subchunk.byteLength > 0) {
+        controller.enqueue(subchunk);
+      }
+    },
   });
 }
 
