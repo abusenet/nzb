@@ -17,7 +17,17 @@ if (import.meta.main) {
 }
 
 export function help() {
-  return `Usage: nzb-combine [...flags] <target> ...sources`;
+  return `NZB Combine
+  Combines multiple NZB sources into a target NZB.
+
+INSTALL:
+  deno install --allow-read --allow-write -n nzb-combine https://deno.land/x/nzb/combine.ts
+
+USAGE:
+  nzb-combine [...options] <target> ...sources
+
+OPTIONS:
+  -o, --out <out> Output file (default stdout)`;
 }
 
 export async function combine(args = Deno.args, defaults = {}) {

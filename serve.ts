@@ -1,4 +1,4 @@
-#!/usr/bin/env -S deno run --allow-net --allow-read
+#!/usr/bin/env -S deno run --allow-net --allow-env --allow-read
 import {
   basename,
   compareEtag,
@@ -43,7 +43,7 @@ const parseOptions = {
     "verbose": "v",
   },
   default: {
-    address: "0.0.0.0:8000",
+    address: "127.0.0.1:8000",
     template: DEFAULT_TEMPLATE,
   },
 };
@@ -53,11 +53,32 @@ if (import.meta.main) {
 }
 
 export function help() {
-  return `Usage: nzb-serve [...flags] <input>`;
+  return `NZB Server
+  Serves content of an NZB file.
+
+INSTALL:
+  deno install --allow-net --allow-env --allow-read -n nzb-serve https://deno.land/x/nzb/serve.ts
+
+USAGE:
+  nzb-serve [...options] <input>
+
+OPTIONS:
+  --address, -addr <address> IPaddress:Port or :Port to bind server to (default "127.0.0.1:8000")
+  --template, -t <template> Path to HTML template to use (default "./index.html")
+  --hostname, -h <hostname> Hostname of the NNTP server (default "localhost")
+  --port, -P <port> Port of the NNTP server (default "8080")
+  --ssl, -S <true|false> Whether to use SSL (default false)
+  --username, -u <username> Username to authenticate with the NNTP server
+  --password, -p <password> Password to authenticate with the NNTP server
+  --verbose, -v <true|false> Whether to log requests (default false)`;
 }
 
 /**
- * Serves an input NZB as a folder listing
+ * Serves an input NZB as a folder listing.
+ *
+ * This is the main CLI entrypoint, which spawns a web server to serve
+ * the input NZB as listing with `serveNZBIndex`, and routes file
+ * requests to `serveFile`.
  */
 export async function serve(args = Deno.args) {
   const {
@@ -118,6 +139,53 @@ export async function serve(args = Deno.args) {
   );
 }
 
+/**
+ * Serves a request for NZB file as a folder listing
+ *
+ * The NZB path should be passed as a route paramter. Both uncompressed
+ * or gzipped NZB files are supported. The provided NZB path is used to
+ * construct an `NZB` object which is used to serve its content.
+ *
+ * ```ts
+ * import { serve } from "https://deno.land/std@0.147.0/http/server.ts";
+ * import { router } from "https://crux.land/router@0.0.12";
+ *
+ * import { serveNZBIndex } from "./serve.ts";
+ *
+ * await serve(
+ *   router({
+ *     "/*.nzb{:gzip(.gz)}?{/}?": (request, conn, params) => {
+ *       const { 0: pathname, gzip } = params;
+ *       const nzb = `${pathname}.nzb${gzip}`;
+ *       return serveNZBIndex(request, conn, {
+ *         nzb: decodeURIComponent(nzb),
+ *       });
+ *     },
+ *     },
+ *   }),
+ * );
+ * ```
+ *
+ * The request can have an `action` query parameter which is used to
+ * determine the action to take on the files. There must be form data
+ * with a "files" field associated with the action. The "files" will be
+ * applied with the requested action.
+ *
+ * Right now the only supported action is "extract".
+ *
+ * By default, the listing is rendered using the built-in `index.html`
+ * template, which simply displays the NZB information and its files as
+ * clickable links, which are then handled by `serveFile` handler.
+ *
+ * This template can be changed by setting `template` query parameter
+ * to another URL. The template could be anything with placeholders for
+ * `name` and `files`. See `index.html` for an example.
+ *
+ * Even though the base template is static HTML, there should not be
+ * any stopping you from going full SPA (Single Page Application) with
+ * it. You can even have a template the returns JSON instead, and serve
+ * your own index page.
+ */
 export async function serveNZBIndex(
   request: Request,
   _conn: ConnInfo,
@@ -178,6 +246,45 @@ export async function serveNZBIndex(
   return new Response(page, { status, headers });
 }
 
+/**
+ * Serves a request for a file inside an NZB.
+ *
+ * The NZB path and the file name should be passed as a route paramter.
+ * Both uncompressed or gzipped construct an `NZB` object which is used
+ * to retrieve the requested file's information.
+ *
+ * The file is then requested through NNTP and streamed back to the
+ * client. It is up to the client to handle the response, whether to
+ * play the media file, or to ask the user to save it to disk.
+ *
+ * Range request is supported.
+ *
+ * ```ts
+ * import { serve } from "https://deno.land/std@0.147.0/http/server.ts";
+ * import { router } from "https://crux.land/router@0.0.12";
+ *
+ * import { serveFile } from "./serve.ts";
+ *
+ * await serve(
+ *   router({
+ *     "/*.nzb{:gzip(.gz)}?/:file": (request, conn, params) => {
+ *       const { 0: pathname, gzip, file } = params;
+ *       const nzb = `${pathname}.nzb${gzip}`;
+ *       return serveFile(request, conn, {
+ *         nzb: decodeURIComponent(nzb),
+ *         file: decodeURIComponent(file),
+ *       });
+ *     },
+ *   }),
+ * );
+ * ```
+ *
+ * Internally, the handler normalizes the request and passes to `get`
+ * to do the fetching and streaming. All NNTP information are retrieved
+ * from environment variables, unless specified through querystring.
+ *
+ * See `get` for the list of parameters.
+ */
 export async function serveFile(
   request: Request,
   _conn: ConnInfo,

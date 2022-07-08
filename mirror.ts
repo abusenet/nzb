@@ -12,6 +12,8 @@ import { Output } from "./model.ts";
 import { mirrorArticle } from "./mirrorArticle.ts";
 import { fetchNZB, Progress } from "./util.ts";
 
+const encoder = new TextEncoder();
+
 const parseOptions = {
   string: [
     "hostname",
@@ -74,13 +76,44 @@ if (import.meta.main) {
 }
 
 export function help() {
-  return `Usage: nzb-mirror [...flags] <input>`;
+  return `NZB Mirror
+  Mirrors an NZB file.
+
+INSTALL:
+  deno install --allow-net --allow-env --allow-read --allow-write -n nzb-mirror https://deno.land/x/nzb/mirror.ts
+
+USAGE:
+  nzb-mirror [...options] <input>
+
+OPTIONS:
+  --hostname, -h <hostname> The hostname of the NNTP server.
+  --port, -P <port> The port of the NNTP server.
+  --ssl, -S Whether to use SSL.
+  --username, -u <username> The username to authenticate with.
+  --password, -p <password> The password to authenticate with.
+  --connections, -n <connections> The number of connections to use.
+  --connect-retries, -r <connect-retries> The number of retries to connect.
+  --reconnect-delay, -d <reconnect-delay> The delay between reconnects.
+  --request-retries, -R <request-retries> The number of retries to request.
+  --post-retry-delay, -D <post-retry-delay> The delay between retries.
+  --comment, -t <comment> The comment to use.
+  --comment2, -T <comment2> The second comment to use.
+  --subject, -s <subject> The subject to use.
+  --from, -f <from> The from address to use.
+  --groups, -g <groups> The groups to post to.
+  --date, -D <date> The date to use.
+  --message-id, -m <message-id> The message-id to use.
+  --out, -o <out> The output file.
+  --progress, -p Whether to show progress.`;
 }
 
 /**
  * Mirrors an NZB to another
- * @param args List of arguments
- * @param defaults Optional params that are used as defaults for `args`
+ *
+ * For each files in the article, retrieves its segments and re-posts
+ * them, using the original NZB headers or ones provided from options.
+ *
+ * The new segments and files are gathered into a new NZB.
  */
 export async function mirror(args = Deno.args, defaults = {}): Promise<void> {
   const options = parseFlags(args, parseOptions);
@@ -154,8 +187,6 @@ export async function mirror(args = Deno.args, defaults = {}): Promise<void> {
   if (date === "now") {
     date = new Date().toUTCString();
   }
-
-  const encoder = new TextEncoder();
 
   function writeln(lines: string | string[], ending = "\n"): Promise<number> {
     if (!output) return Promise.resolve(0);

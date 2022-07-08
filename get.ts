@@ -34,7 +34,7 @@ const parseOptions = {
     "port": "P",
     "ssl": "S",
     "username": ["user", "u"],
-    "password": ["passw", "p"],
+    "password": ["pass", "p"],
   },
   default: {
     hostname: Deno.env.get("NNTP_HOSTNAME"),
@@ -50,9 +50,31 @@ if (import.meta.main) {
 }
 
 export function help() {
-  return `Usage: nzb-get [...flags] <input> <filename>`;
+  return `NZB Get
+  Fetches a file in an NZB.
+
+INSTALL:
+  deno install --allow-net --allow-env --allow-read -n nzb-get https://deno.land/x/nzb/get.ts
+
+USAGE:
+  nzb-get [...options] <input> <filename>
+
+OPTIONS:
+  --hostname, -h <hostname> The hostname of the NNTP server.
+  --port, -P <port> The port of the NNTP server.
+  --ssl, -S Whether to use SSL.
+  --username, -u <username> Username to authenticate with the NNTP server.
+  --password, -p <password> Password to authenticate with the NNTP server.
+  --start, -s <start> The start of the range of the file to fetch.
+  --end, -e <end> The end of the range of the file to fetch.`;
 }
 
+/**
+ * Retrieves a file speficified by the given NZB and file name.
+ *
+ * All segments of the file are returned as a single stream, clipped to
+ * the given range if any.
+ */
 export async function get(args = Deno.args, defaults = {}) {
   const {
     _: [input, filename],

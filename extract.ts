@@ -16,7 +16,17 @@ if (import.meta.main) {
 }
 
 export function help() {
-  return `Usage: nzb-extract [...flags] <input> <glob|regex>`;
+  return `NZB Extract
+  Extract files in an NZB into a new NZB using glob/regex.
+
+INSTALL:
+  deno install --allow-read --allow-write -n nzb-extract https://deno.land/x/nzb/extract.ts
+
+USAGE:
+  nzb-extract [...options] <input> <glob|regex>
+
+  OPTIONS:
+    -o, --out <out> Output file (default stdout)`;
 }
 
 /**
