@@ -117,7 +117,7 @@ export async function serve(args = Deno.args) {
         return response;
       }
 
-      const file = nzb.file(pathname.substring(1));
+      const file = nzb.file(decodeURI(pathname.substring(1)));
 
       if (!file) {
         throw new Deno.errors.NotFound();
