@@ -310,6 +310,11 @@ export async function serveFile(
   if (contentTypeValue) {
     headers.set("Content-Type", contentTypeValue);
   }
+  
+  if (extname(file.name) === ".mkv") {
+    // Chrome needs this changed to play MKV.
+    headers.set("Content-Type", "video/webm");
+  }
 
   let status = Status.OK;
   const responseInit: ResponseInit = { headers };
