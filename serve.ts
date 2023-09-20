@@ -1,13 +1,11 @@
 #!/usr/bin/env -S deno run --allow-net --allow-env --allow-read
 import {
   basename,
-  compareEtag,
-  ConnInfo,
   contentType,
   encode,
   extname,
+  ifNoneMatch,
   parseFlags,
-  serve as serveHttp,
   Status,
   STATUS_TEXT,
 } from "./deps.ts";
@@ -99,8 +97,12 @@ export async function serve(args = Deno.args) {
 
   const [hostname, port] = address.split(":");
 
-  await serveHttp(
-    async (request: Request, conn: ConnInfo): Promise<Response> => {
+  Deno.serve(
+    { hostname, port: Number(port) },
+    async (
+      request: Request,
+      conn: Deno.ServeHandlerInfo,
+    ): Promise<Response> => {
       const { pathname, searchParams } = new URL(request.url);
 
       if (pathname === "/") {
@@ -135,7 +137,6 @@ export async function serve(args = Deno.args) {
 
       return response;
     },
-    { hostname, port: Number(port) },
   );
 }
 
@@ -188,7 +189,7 @@ export async function serve(args = Deno.args) {
  */
 export async function serveNZBIndex(
   request: Request,
-  _conn: ConnInfo,
+  _conn: Deno.ServeHandlerInfo,
   { nzb }: Record<string, string | NZB>,
 ): Promise<Response> {
   if (typeof nzb === "string") {
@@ -287,7 +288,7 @@ export async function serveNZBIndex(
  */
 export async function serveFile(
   request: Request,
-  _conn: ConnInfo,
+  _conn: Deno.ServeHandlerInfo,
   { nzb, file }: Record<string, string | NZB | File>,
 ): Promise<Response> {
   if (typeof file === "string") {
@@ -353,11 +354,11 @@ export async function serveFile(
     // If a `If-None-Match` header is present and the value matches the tag or
     // if a `If-Modified-Since` header is present and the value is bigger than
     // the access timestamp value, then return 304
-    const ifNoneMatch = request.headers.get("If-None-Match");
+    const ifNoneMatchValue = request.headers.get("If-None-Match");
     const ifModifiedSince = request.headers.get("If-Modified-Since");
     if (
-      (ifNoneMatch && compareEtag(ifNoneMatch, simpleEtag)) ||
-      (ifNoneMatch === null &&
+      (ifNoneMatchValue && ifNoneMatch(ifNoneMatchValue, simpleEtag)) ||
+      (ifNoneMatchValue === null &&
         ifModifiedSince &&
         file.lastModified < new Date(ifModifiedSince).getTime() + 1000)
     ) {

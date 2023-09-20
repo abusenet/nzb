@@ -90,7 +90,7 @@ export class Progress extends ProgressBar {
       // Displays rate.
       .replace(
         ":rate",
-        prettyBytes((completed / (elapsed)) * 1000),
+        prettyBytes((completed / elapsed) * 1000),
       )
       // Pretifies elapsed time
       .replace(

@@ -1,4 +1,4 @@
-import { Article, Client, parseFlags, retryAsync } from "./deps.ts";
+import { Article, Client, parseFlags, retry } from "./deps.ts";
 
 export async function mirrorArticle(
   src: string | Article = Deno.args[0],
@@ -39,14 +39,16 @@ export async function mirrorArticle(
 
   dst.body = body;
 
-  response = await retryAsync(
+  response = await retry(
     async () => {
       const response = await client.post(dst);
       return response;
     },
     {
-      delay: Number(options["post-retry-delay"] || 0),
-      maxTry: Number(options["request-retries"] || 5),
+      multiplier: 1,
+      jitter: 0,
+      minTimeout: Number(options["post-retry-delay"] || 0),
+      maxAttempts: Number(options["request-retries"] || 5),
     },
   );
 
@@ -64,7 +66,7 @@ export async function mirrorArticle(
 async function setup(options: Record<string, string> = {}) {
   const { hostname, port, ssl, username, password } = options;
 
-  return await retryAsync(
+  return await retry(
     async () => {
       const client = await Client.connect({
         hostname,
@@ -80,8 +82,10 @@ async function setup(options: Record<string, string> = {}) {
       return client;
     },
     {
-      maxTry: Number(options["connect-retries"] || 1),
-      delay: Number(options["reconnect-delay"] || 15 * 1000),
+      multiplier: 1,
+      jitter: 0,
+      maxAttempts: Number(options["connect-retries"] || 1),
+      minTimeout: Number(options["reconnect-delay"] || 15 * 1000),
     },
   );
 }
