@@ -198,7 +198,18 @@ export async function serveNZBIndex(
 
   const name = basename(nzb.name as string);
   const { pathname, searchParams } = new URL(request.url);
+  const query = searchParams.get("q");
   const action = searchParams.get("action");
+
+  if (query) {
+    const files = nzb.files;
+    nzb = new NZB();
+    files.forEach((file) => {
+      if (file.name.match(query as string)) {
+        nzb.files.push(file);
+      }
+    });
+  }
 
   const headers = new Headers();
   const status = 200;
@@ -241,6 +252,7 @@ export async function serveNZBIndex(
       base: pathname.replace(/\/$/, ""),
       name: name,
       files: nzb.files,
+      params: Object.fromEntries(searchParams),
     }),
   );
 

@@ -12,6 +12,14 @@
     <main>
       <h1>Index of {{ name | basename }}</h1>
 
+      <form>
+        <label>
+          Filter
+          <input name="q" type="search" value="{{ params.q }}" />
+        </label>
+        <button type="submit">⏎</button>
+      </form>
+
       <table cellpadding="6">
         <thead>
           <tr>
