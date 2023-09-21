@@ -12,7 +12,8 @@ using the pre-built binaries for each platforms in Releases.
 - [x] `combine`: Combines multiple NZB files into one.
 - [x] `extract`: Extracts files in a NZB file into new NZB files.
 - [x] `get`: Fetches data specified in a NZB file.
-- [x] `mirror`: Mirrors articles in a NZB file with new information
+- [x] `mirror`: Mirrors articles in a NZB file with new information.
+- [x] `search`: Searches files into a NZB file.
 - [x] `serve`: Serves a NZB file as an index webpage.
 
 ## `combine`
@@ -116,6 +117,15 @@ The following placeholders can be used in `--subject` and `--message-id` flags.
 {comment2}  Value from `--comment2`
 {timestamp} Unix timestamp of post
 ${rand(N)}  Random text, N characters long
+```
+
+## `search`
+
+Searches for files matching certain query in the Subject and store results in a
+NZB file and outputs the resulting NZB to stdout or a specified output file.
+
+```shell
+nzb search --group alt.binaries.test --range 1- Big.Buck.Bunny > bunny.nzb
 ```
 
 ## `serve`
