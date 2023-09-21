@@ -62,6 +62,65 @@ export function prettySeconds(seconds: number): string {
   return result;
 }
 
+const SUBJECT_REGEX =
+  /"(?<name>[^"]+)"(?: yEnc)?(?: \((?<partnum>[\d]+)\/(?<numparts>[\d]+)\))?(?: yEnc)?[^\d]?(?<size>[\d]+)?/;
+
+/**
+ * Parses a subject line of a yEnc article to file name and size.
+ *
+ * Standard single-part yEncoded binaries require no special conventions for
+ * the subject line.  It is recommended, however, that yEncoded binaries be
+ * specifically identified as such, until the yEncode encoding format becomes
+ * more widely implemented.
+ *
+ * The suggested format for subject lines for single-part binaries is:
+ *
+ * [Comment1] "filename" 12345 yEnc bytes [Comment2]
+ *
+ * [Comment1] and [Comment2] are optional.  The filename should always be
+ * enclosed in quotes; this allows for easy detection, even when the filename
+ * includes spaces or other special characters.  The word "yEnc" should be
+ * placed in between the file size and the word "bytes".
+ * > (1.2) see additional experience information
+ * > Placing the word "yEnc" between filename+bytes or bytes+comment2
+ * > is acceptable.
+ *
+ * Multi-part archives should always be identified as such.  As with
+ * single-part binaries, they should also be identified as yEncoded until
+ * yEncoding becomes more mainstream.
+ *
+ * The (strongly) recommended format for subject lines for multi-part binaries
+ * is:
+ *
+ * [Comment1] "filename" yEnc (partnum/numparts) [size] [Comment2]
+ *
+ * Again, [Comment1] and [Comment2] are optional.  The [size] value is also
+ * optional here.  The filename must be included, in quotes.  The keyword
+ * "yEnc" is mandatory, and must appear between the filename and the size (or
+ * Comment2, if size is omitted).  Future revisions of the draft may specify
+ * additional information may be inserted between the "yEnc" keyword and the
+ * opening parenthesis of the part number.
+ * > (1.2) see additional experience information
+ * > Placing the word "yEnc" between (#/#)+size or size+comment2
+ * > is acceptable.
+ *
+ * ## Examples
+ *
+ * ```ts
+ * yEncParse(`reftestnzb 100MB f4d76efc6789 [01/16] - "SomeTestfile-100MB.part1.rar" yEnc (1/22) 15728640`);
+ * { name: "SomeTestfile-100MB.part1.rar", size: 15728640, partnum: 1, numparts: 22 }
+ * ```
+ *
+ * @param {string} subject The subject line of the article.
+ * @returns {object} An object with the parsed values.
+ */
+export function yEncParse(
+  subject: string,
+): { name?: string; size?: number; partnum?: number; numparts?: number } {
+  const { groups = {} } = subject.match(SUBJECT_REGEX) || {};
+  return groups;
+}
+
 /**
  * Custom Progress with prettified values.
  */
