@@ -9,12 +9,23 @@ using the pre-built binaries for each platforms in Releases.
 
 ## Commands
 
+- [x] `check`: Checks if a NZB file is fetchable.
 - [x] `combine`: Combines multiple NZB files into one.
 - [x] `extract`: Extracts files in a NZB file into new NZB files.
 - [x] `get`: Fetches data specified in a NZB file.
 - [x] `mirror`: Mirrors articles in a NZB file with new information.
 - [x] `search`: Searches files into a NZB file.
 - [x] `serve`: Serves a NZB file as an index webpage.
+
+## `check`
+
+Checks if all articles in the NZB still exist. By default, the check is done
+using `STAT` method, which is faster but not as reliable as `HEAD` method.
+Use `--method` flag to specify the method to use.
+
+```shell
+nzb check source.nzb --method=HEAD
+```
 
 ## `combine`
 

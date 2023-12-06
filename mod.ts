@@ -1,15 +1,19 @@
 #!/usr/bin/env -S deno run --allow-net --allow-env --allow-read --allow-write
+import { check } from "./check.ts";
 import { combine } from "./combine.ts";
 import { extract } from "./extract.ts";
 import { get } from "./get.ts";
 import { mirror } from "./mirror.ts";
+import { search } from "./search.ts";
 import { serve } from "./serve.ts";
 
 const exports = {
+  check,
   combine,
   extract,
   get,
   mirror,
+  search,
   serve,
 };
 
@@ -24,10 +28,12 @@ USAGE:
   nzb <command> <input> [...options]
 
 COMMANDS:
+  check [--method] [...options] <input>
   combine [...options] <target> ...sources
   extract [...options] <input> <glob|regex>
   get [...options] <input> <filename>
   mirror [...options] <input>
+  search [...options] <input>
   serve [...options] <input>
 
 OPTIONS:

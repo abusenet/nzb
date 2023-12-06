@@ -49,7 +49,7 @@ export function help() {
   Search files and stores results into an NZB file.
 
 INSTALL:
-  deno install --allow-env --allow-net --allow-write -n nzb-extract https://deno.land/x/nzb/extract.ts
+  deno install --allow-env --allow-net --allow-write -n nzb-search https://deno.land/x/nzb/search.ts
 
 USAGE:
   nzb-search [...options] <query>
@@ -59,7 +59,7 @@ USAGE:
     --range <start>-[end] Range of article numbers to search within.
     --meta <name>=<value> Meta data to add in the resulting NZB, such as password.
     -o, --out <out> Output file (default stdout)
-    
+
 PERMISSIONS:
   --allow-env: to read environment variables for NTTP providers.
   --allow-net: to connect to NNTP provider.
