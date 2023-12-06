@@ -20,8 +20,8 @@ using the pre-built binaries for each platforms in Releases.
 ## `check`
 
 Checks if all articles in the NZB still exist. By default, the check is done
-using `STAT` method, which is faster but not as reliable as `HEAD` method.
-Use `--method` flag to specify the method to use.
+using `STAT` method, which is faster but not as reliable as `HEAD` method. Use
+`--method` flag to specify the method to use.
 
 ```shell
 nzb check source.nzb --method=HEAD

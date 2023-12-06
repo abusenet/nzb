@@ -50,7 +50,7 @@ USAGE:
     --ssl, -S Whether to use SSL.
     --username, -u <username> Username to authenticate with the NNTP server.
     --password, -p <password> Password to authenticate with the NNTP server.
-    --method <method> The method to use to check articles. (one of "STAT", "HEAD", "BODY" or "ARTICLE", default "STAT")`
+    --method <method> The method to use to check articles. (one of "STAT", "HEAD", "BODY" or "ARTICLE", default "STAT")`;
 }
 
 export async function check(args = Deno.args, defaults = {}) {
