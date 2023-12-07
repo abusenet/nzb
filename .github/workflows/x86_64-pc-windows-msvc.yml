@@ -6,7 +6,7 @@
 # This workflow will install Deno then run Deno lint and test.
 # For more information see: https://github.com/denoland/setup-deno
 
-name: CI
+name: x86_64-pc-windows-msvc
 
 on:
   push:
@@ -22,7 +22,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        target: [ x86_64-unknown-linux-gnu, x86_64-pc-windows-msvc, x86_64-apple-darwin, aarch64-apple-darwin ]
+        target: [ x86_64-pc-windows-msvc ]
 
     # Set DENO_DIR to an absolute or relative path on the runner.
     env:
@@ -34,19 +34,19 @@ jobs:
           git config --global core.autocrlf false
           git config --global core.eol lf
 
-      - name: Cache Deno dependencies 
+      - name: Cache Deno dependencies
         uses: actions/cache@v2
         with:
           path: ${{ env.DENO_DIR }}
           key: ${{ secrets.CACHE_VERSION }}-${{ hashFiles('lock.json') }}
-  
+
       - name: Setup repo
         uses: actions/checkout@v3
 
       - name: Setup Deno
         uses: denoland/setup-deno@v1
         with:
-          deno-version: v1.37
+          deno-version: v1.38
 
       # Check if the code is formatted according to Deno's default
       # formatting conventions.
@@ -68,5 +68,5 @@ jobs:
       - name: Upload artifacts
         uses: actions/upload-artifact@v3
         with:
-          name: nzb
+          name: nzb-${{ matrix.target }}.exe
           path: dist
