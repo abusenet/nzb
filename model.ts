@@ -1,5 +1,10 @@
-import { Article, ElementInfo, SAXParser } from "./deps.ts";
+import { Article } from "./deps.ts";
 import { yEncParse } from "./util.ts";
+import {
+  Element,
+  HTMLRewriter,
+  TextChunk,
+} from "npm:@worker-tools/html-rewriter@0.1.0-pre.17/base64";
 
 export interface File {
   poster: string;
@@ -23,26 +28,26 @@ export interface Segment {
 }
 
 /** Output type for most of the commands. */
-export type Output = Deno.Writer & Deno.Closer & {
+export type Output = {
   readonly writable: WritableStream<Uint8Array>;
 };
 
 export class NZB implements Iterable<File> {
-  #reader?: Deno.Reader;
+  #readable?: ReadableStream;
   readonly head: Record<string, string> = {};
   readonly files: File[] = [];
   #segments = 0;
   name?: string;
   size = 0;
 
-  static async from(reader: Deno.Reader, name?: string): Promise<NZB> {
-    const nzb = new NZB(reader, name);
+  static async from(readable: ReadableStream, name?: string): Promise<NZB> {
+    const nzb = new NZB(readable, name);
     await nzb.parse();
     return nzb;
   }
 
-  constructor(reader?: Deno.Reader, name?: string) {
-    this.#reader = reader;
+  constructor(readable?: ReadableStream, name?: string) {
+    this.#readable = readable;
     this.name = name;
   }
 
@@ -50,87 +55,102 @@ export class NZB implements Iterable<File> {
     return this.#segments;
   }
 
-  parse(reader: Deno.Reader | undefined = this.#reader) {
-    if (!reader) {
+  parse(readable = this.#readable) {
+    if (!readable) {
       return;
     }
 
-    const parser = new SAXParser();
-    parser.on("text", (text: string, { qName, attributes }: ElementInfo) => {
-      if (qName === "meta") {
-        const type = attributes.find((attr) => attr.qName === "type")!.value;
-        this.head[type] = text;
-      }
+    let meta = { name: "", value: "" }, group = "";
 
-      if (qName === "group") {
-        const file: File = this.files.at(-1)!;
-        file.groups.push(text);
-      }
-
-      if (qName === "segment") {
-        const file: File = this.files.at(-1)!;
-        file.segments.push({
-          id: text,
-          size: Number(
-            attributes.find((attr) => attr.qName === "bytes")!.value,
-          ),
-          number: Number(
-            attributes.find((attr) => attr.qName === "number")!.value,
-          ),
-        });
-
-        this.#segments++;
-      }
-    });
-
-    parser.on("start_element", (element: ElementInfo) => {
-      if (element.qName === "file") {
-        const file: File = {
-          poster: "",
-          subject: "",
-          name: "",
-          lastModified: Date.now(),
-          size: 0,
-          groups: [],
-          segments: [],
-        };
-
-        element.attributes.forEach(({ qName, value }) => {
-          if (qName === "poster") file.poster = qName;
-          // Stores the seconds specfified in `date` attribute as milliseconds.
-          if (qName === "date") file.lastModified = Number(value) * 1000;
-
-          if (qName === "subject") {
-            file.subject = value;
-
-            if (!value.indexOf("yEnc")) return;
-            const { name, size } = yEncParse(value);
-            file.name = name || "";
-            file.size = Number(size);
+    return new HTMLRewriter()
+      .on("head", {
+        text: ({ text, lastInTextNode }: TextChunk) => {
+          meta.value += text;
+          if (lastInTextNode) {
+            meta.value = meta.value.trim();
+            if (meta.name) {
+              this.head[meta.name] = meta.value;
+            }
           }
-          // @ts-ignore string key
-          file[qName as keyof File] = value;
-        });
+        },
+      })
+      .on("head > meta", {
+        element: (element: Element) => {
+          const name = element.getAttribute("type");
+          meta = { name, value: "" };
+        },
+      })
+      .on("file > groups > group", {
+        element: (element: Element) => {
+          const file: File = this.files.at(-1)!;
+          group = "";
 
-        this.files.push(file);
-      }
-    });
+          element.onEndTag(() => {
+            file.groups.push(group);
+          });
+        },
+        text: ({ text, lastInTextNode }: TextChunk) => {
+          group += text;
+          if (lastInTextNode) {
+            group = group.trim();
+          }
+        },
+      })
+      .on("file", {
+        element: (element: Element) => {
+          const subject = unescapeXml(element.getAttribute("subject"));
+          const file: File = {
+            poster: element.getAttribute("poster"),
+            subject,
+            name: "",
+            // Stores the seconds specfified in `date` attribute as milliseconds.
+            lastModified: Number(element.getAttribute("date")) * 1000,
+            size: 0,
+            groups: [],
+            segments: [],
+          };
 
-    parser.on("end_element", (element: ElementInfo) => {
-      if (element.qName === "file") {
-        // Checks if the File has a size (calculated from yEnc subject).
-        // If not, sums the bytes of all its segments.
-        const file: File = this.files.at(-1)!;
-        if (!file.size) {
-          file.size = file.segments.reduce((sum, { size }) => sum + size, 0);
-        }
+          if (!subject.indexOf("yEnc")) return;
+          const { name, size } = yEncParse(subject);
+          file.name = name || "";
+          file.size = Number(size);
 
-        this.size += file.size;
-      }
-    });
+          this.files.push(file);
 
-    // Starts parsing.
-    return parser.parse(reader);
+          element.onEndTag(() => {
+            if (!file.size) {
+              file.size = file.segments.reduce(
+                (sum, { size }) => sum + size,
+                0,
+              );
+            }
+
+            this.size += file.size;
+          });
+        },
+      })
+      .on("file > segments > segment", {
+        element: (element: Element) => {
+          const file = this.files.at(-1)!;
+          file.segments.push({
+            id: "",
+            size: Number(element.getAttribute("bytes")),
+            number: Number(element.getAttribute("number")),
+          });
+
+          this.#segments++;
+        },
+        text: ({ text, lastInTextNode }: TextChunk) => {
+          const file = this.files.at(-1)!;
+          const segment = file.segments.at(-1)!;
+          segment.id += text;
+          if (lastInTextNode) {
+            segment.id = segment.id.trim();
+          }
+        },
+      })
+      .transform(new Response(readable))
+      .arrayBuffer(); // Kickstarts the stream.
   }
 
   file(name: string) {
@@ -252,6 +272,27 @@ function escapeXml(unsafe: string): string {
         return `&apos;`;
       case `"`:
         return `&quot;`;
+      default:
+        return c;
+    }
+  });
+}
+
+function unescapeXml(escaped: string): string {
+  return escaped.replace(/&lt;|&gt;|&amp;|&apos;|&quot;/g, function (c) {
+    switch (c) {
+      case `&lt;`:
+        return `<`;
+      case `&gt;`:
+        return `>`;
+      case `&amp;`:
+        return `&`;
+      case `&apos;`:
+        return `'`;
+      case `&quot;`:
+        return `"`;
+      default:
+        return c;
     }
   });
 }

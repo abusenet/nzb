@@ -1,32 +1,25 @@
-#!/usr/bin/env -S deno run --allow-read --allow-write
-import { globToRegExp, isGlob, parseFlags } from "./deps.ts";
-import { File, NZB, Output } from "./model.ts";
-
-const parseOptions = {
-  string: [
-    "out",
-  ],
-  alias: {
-    "out": "o",
-  },
-};
-
-if (import.meta.main) {
-  await extract();
-}
+#!/usr/bin/env -S deno run --allow-read
+import { globToRegExp, isGlob, parseArgs } from "./deps.ts";
+import { File, NZB } from "./model.ts";
+import { fetchNZB } from "./util.ts";
 
 export function help() {
   return `NZB Extract
   Extract files in an NZB into a new NZB using glob/regex.
 
 INSTALL:
-  deno install --allow-read --allow-write -n nzb-extract https://deno.land/x/nzb/extract.ts
+  deno install --allow-read -n nzb-extract https://deno.land/x/nzb/extract.ts
 
 USAGE:
   nzb-extract [...options] <input> <glob|regex>
 
-  OPTIONS:
-    -o, --out <out> Output file (default stdout)`;
+  OPTIONS:`;
+}
+
+const parseOptions = {};
+
+if (import.meta.main) {
+  await extract(Deno.args, Deno.stdout.writable);
 }
 
 /**
@@ -38,37 +31,23 @@ USAGE:
  * A second parameter can be used to provide non-string arguments,
  * such as `out` with a `Writer`.
  */
-export async function extract(args = Deno.args, defaults = {}) {
+export async function extract(
+  args: unknown[] = Deno.args,
+  output = Deno.stdout.writable,
+) {
   const {
-    _: [filename, pattern],
-    ...flags
-  } = parseFlags(args, parseOptions);
+    _: [input, pattern],
+  } = parseArgs(args as string[], parseOptions);
 
-  let { out, nzb } = Object.assign(defaults, flags);
-
-  if (!filename) {
+  if (!input) {
     console.error("Missing input");
     console.error(help());
     return;
   }
 
-  let output: Output = out;
-  if (!out || out === "-") {
-    output = Deno.stdout;
-  } else if (typeof out === "string") {
-    output = await Deno.open(out, {
-      read: false,
-      write: true,
-      create: true,
-      truncate: true,
-    });
-  }
-
-  if (!nzb) {
-    nzb = await NZB.from(
-      await Deno.open(filename as string),
-    );
-  }
+  const nzb = typeof input === "string"
+    ? await fetchNZB(input)
+    : input as unknown as NZB;
 
   let regex: RegExp;
 
@@ -81,8 +60,9 @@ export async function extract(args = Deno.args, defaults = {}) {
   // Filters out files that do not matchthe regex.
   filter(nzb.files, regex);
 
-  await output.write(new TextEncoder().encode(nzb.toString()));
-  output.close();
+  const writer = output.getWriter();
+  await writer.write(new TextEncoder().encode(nzb.toString()));
+  writer.close();
 }
 
 /** Filter an array based on a regex inline. */

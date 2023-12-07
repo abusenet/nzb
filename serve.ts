@@ -2,11 +2,11 @@
 import {
   basename,
   contentType,
-  encode,
+  encodeHex,
   extname,
   ifNoneMatch,
-  parseFlags,
-  Status,
+  parseArgs,
+  STATUS_CODE,
   STATUS_TEXT,
 } from "./deps.ts";
 
@@ -14,41 +14,6 @@ import { File, NZB } from "./model.ts";
 import { extract } from "./extract.ts";
 import { get } from "./get.ts";
 import { fetchNZB, templatized } from "./util.ts";
-
-const DEFAULT_TEMPLATE = "./index.html";
-
-const encoder = new TextEncoder();
-const decoder = new TextDecoder();
-
-const parseOptions = {
-  string: [
-    "address",
-    "template",
-    "hostname",
-    "port",
-    "username",
-    "password",
-  ],
-  boolean: [
-    "ssl",
-    "verbose",
-  ],
-  alias: {
-    "address": "addr",
-    "hostname": ["host", "h"],
-    "port": "P",
-    "ssl": "S",
-    "verbose": "v",
-  },
-  default: {
-    address: "127.0.0.1:8000",
-    template: DEFAULT_TEMPLATE,
-  },
-};
-
-if (import.meta.main) {
-  await serve();
-}
 
 export function help() {
   return `NZB Server
@@ -71,73 +36,99 @@ OPTIONS:
   --verbose, -v <true|false> Whether to log requests (default false)`;
 }
 
+const DEFAULT_TEMPLATE = "./index.html";
+
+const encoder = new TextEncoder();
+
+const parseOptions = {
+  string: [
+    "address",
+    "template",
+    "hostname",
+    "username",
+    "password",
+  ],
+  boolean: [
+    "ssl",
+    "verbose",
+  ],
+  default: {
+    address: "127.0.0.1:8000",
+    template: DEFAULT_TEMPLATE,
+    hostname: Deno.env.get("NNTP_HOSTNAME"),
+    port: Number(Deno.env.get("NNTP_PORT")),
+    username: Deno.env.get("NNTP_USER"),
+    password: Deno.env.get("NNTP_PASS"),
+    ssl: Deno.env.get("NNTP_SSL") === "true",
+    verbose: false,
+  },
+};
+
+if (import.meta.main) {
+  serve(Deno.args, Deno.serve);
+}
+
 /**
  * Serves an input NZB as a folder listing.
  *
- * This is the main CLI entrypoint, which spawns a web server to serve
- * the input NZB as listing with `serveNZBIndex`, and routes file
+ * This is a handler to be passed to a web server like `Deno.serve` to
+ * serve the input NZB as listing with `serveNZBIndex`, and routes file
  * requests to `serveFile`.
  */
-export async function serve(args = Deno.args) {
+export function serve(args = Deno.args, server = Deno.serve) {
+  const parsedArgs = parseArgs(args as string[], parseOptions);
   const {
-    _: [input],
+    _: [input = ""],
     address,
     template,
     verbose,
-    ...flags
-  } = parseFlags(args, parseOptions);
+  } = parsedArgs;
 
   if (!input) {
     console.error("Missing input");
     console.error(help());
     return;
   }
-
-  const nzb = await fetchNZB(input as string);
-
   const [hostname, port] = address.split(":");
 
-  Deno.serve(
-    { hostname, port: Number(port) },
-    async (
-      request: Request,
-      conn: Deno.ServeHandlerInfo,
-    ): Promise<Response> => {
-      const { pathname, searchParams } = new URL(request.url);
+  server({ hostname, port: Number(port) }, async (request, conn) => {
+    const url = new URL(request.url);
+    const { pathname, searchParams } = url;
 
-      if (pathname === "/") {
-        if (!searchParams.has("template")) {
-          searchParams.set("template", template);
-        }
+    const nzb = await fetchNZB(searchParams.get("url") || input as string);
+    if (!searchParams.has("template")) {
+      searchParams.set("template", template);
+    }
 
-        const response = await serveNZBIndex(request, conn, { nzb });
+    if (pathname === "/favicon.ico") {
+      return new Response(null);
+    }
 
-        if (verbose) {
-          serverLog(request, response.status);
-        }
-
-        return response;
-      }
-
-      const file = nzb.file(decodeURI(pathname.substring(1)));
-
-      if (!file) {
-        throw new Deno.errors.NotFound();
-      }
-
-      Object.entries(flags).forEach(([key, value]) => {
-        searchParams.set(key, value);
-      });
-
-      const response = await serveFile(request, conn, { nzb, file });
+    if (pathname === "/") {
+      const response = await serveNZBIndex(request, conn, { nzb });
 
       if (verbose) {
         serverLog(request, response.status);
       }
 
       return response;
-    },
-  );
+    }
+
+    const file = nzb.file(decodeURI(pathname.substring(1)));
+
+    if (!file) {
+      throw new Deno.errors.NotFound();
+    }
+
+    request = new Request(url, request);
+    const response = await serveFile(request, conn, { nzb, file });
+
+    if (verbose) {
+      serverLog(request, response.status);
+    }
+
+    return response;
+  });
 }
 
 /**
@@ -206,7 +197,7 @@ export async function serveNZBIndex(
     nzb = new NZB();
     files.forEach((file) => {
       if (file.name.match(query as string)) {
-        nzb.files.push(file);
+        (nzb as NZB).files.push(file);
       }
     });
   }
@@ -225,13 +216,7 @@ export async function serveNZBIndex(
     );
 
     const { readable, writable } = new TransformStream();
-    extract([
-      nzb.name as string,
-      files.map(escapeRegExp).join("|"),
-    ], {
-      nzb,
-      out: writable.getWriter(),
-    });
+    extract([nzb as unknown, files.map(escapeRegExp).join("|")], writable);
 
     return new Response(readable, { status, headers });
   }
@@ -301,7 +286,7 @@ export async function serveNZBIndex(
 export async function serveFile(
   request: Request,
   _conn: Deno.ServeHandlerInfo,
-  { nzb, file }: Record<string, string | NZB | File>,
+  { nzb, file }: { nzb: NZB; file: File },
 ): Promise<Response> {
   if (typeof file === "string") {
     if (typeof nzb === "string") {
@@ -329,7 +314,7 @@ export async function serveFile(
     headers.set("Content-Type", "video/webm");
   }
 
-  let status = Status.OK;
+  let status: number = STATUS_CODE.OK;
   const responseInit: ResponseInit = { headers };
   // Custom getter for status code and text.
   Object.defineProperties(responseInit, {
@@ -340,7 +325,7 @@ export async function serveFile(
     },
     statusText: {
       get() {
-        return STATUS_TEXT[status];
+        return (STATUS_TEXT as Record<number, string>)[status];
       },
     },
   });
@@ -374,7 +359,7 @@ export async function serveFile(
         ifModifiedSince &&
         file.lastModified < new Date(ifModifiedSince).getTime() + 1000)
     ) {
-      status = Status.NotModified;
+      status = STATUS_CODE.NotModified;
       return new Response(null, responseInit);
     }
   }
@@ -404,7 +389,7 @@ export async function serveFile(
       start > maxRange ||
       end > maxRange)
   ) {
-    status = Status.RequestedRangeNotSatisfiable;
+    status = STATUS_CODE.RangeNotSatisfiable;
     return new Response(responseInit.statusText, responseInit);
   }
 
@@ -416,18 +401,19 @@ export async function serveFile(
     return new Response(null, responseInit);
   }
 
-  // Uses a default transform stream that `get` can write to.
-  const stream = new TransformStream();
-
   const { searchParams } = new URL(request.url);
+  searchParams.set("start", `${start}`);
+  searchParams.set("end", `${end}`);
 
-  const argv = ["dummy", file.name];
+  const argv: unknown[] = [nzb, file];
   [
     "hostname",
     "port",
     "ssl",
     "username",
     "password",
+    "start",
+    "end",
   ].forEach((key) => {
     const value = searchParams.get(key);
     if (value) {
@@ -435,20 +421,15 @@ export async function serveFile(
       argv.push(`${value}`);
     }
   });
-
-  get(argv, {
-    file,
-    start,
-    end,
-    out: stream,
-    ...searchParams,
-  });
+  // Uses a default transform stream that `get` can write to.
+  const { readable, writable } = new TransformStream();
+  get(argv, writable);
 
   if (range && parsed) {
-    status = Status.PartialContent;
+    status = STATUS_CODE.PartialContent;
   }
 
-  return new Response(stream.readable, responseInit);
+  return new Response(readable, responseInit);
 }
 
 function serverLog(req: Request, status: number): void {
@@ -496,5 +477,5 @@ async function createEtagHash(
   }
   const msgUint8 = encoder.encode(message);
   const hashBuffer = await crypto.subtle.digest(algorithm, msgUint8);
-  return decoder.decode(encode(new Uint8Array(hashBuffer)));
+  return encodeHex(new Uint8Array(hashBuffer));
 }

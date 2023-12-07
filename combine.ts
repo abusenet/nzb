@@ -1,42 +1,40 @@
-#!/usr/bin/env -S deno run --allow-read --allow-write
-import { parseFlags } from "./deps.ts";
+#!/usr/bin/env -S deno run --allow-read
+import { parseArgs } from "./deps.ts";
 
-import { NZB, Output } from "./model.ts";
-
-const parseOptions = {
-  string: [
-    "out",
-  ],
-  alias: {
-    "out": "o",
-  },
-};
-
-if (import.meta.main) {
-  await combine();
-}
+import { fetchNZB } from "./util.ts";
 
 export function help() {
   return `NZB Combine
   Combines multiple NZB sources into a target NZB.
 
 INSTALL:
-  deno install --allow-read --allow-write -n nzb-combine https://deno.land/x/nzb/combine.ts
+  deno install --allow-read -n nzb-combine https://deno.land/x/nzb/combine.ts
 
 USAGE:
   nzb-combine [...options] <target> ...sources
 
-OPTIONS:
-  -o, --out <out> Output file (default stdout)`;
+OPTIONS:`;
 }
 
-export async function combine(args = Deno.args, defaults = {}) {
+const parseOptions = {};
+
+if (import.meta.main) {
+  await combine(Deno.args, Deno.stdout.writable);
+}
+
+/**
+ * Combines multiple NZB sources into a target NZB.
+ * @param {string[]} args Argument list.
+ * @param {WritableStream} [writable] Writable stream to output to.
+ * @returns
+ */
+export async function combine(
+  args = Deno.args,
+  output = Deno.stdout.writable,
+) {
   const {
     _: [target, ...sources],
-    ...flags
-  } = parseFlags(args, parseOptions);
-
-  const { out } = Object.assign(defaults, flags);
+  } = parseArgs(args, parseOptions);
 
   if (!target) {
     console.error("Missing input");
@@ -44,34 +42,15 @@ export async function combine(args = Deno.args, defaults = {}) {
     return;
   }
 
-  let output: Output = out;
-  if (!out || out === "-") {
-    output = Deno.stdout;
-  } else if (typeof out === "string") {
-    output = await Deno.open(out, {
-      read: false,
-      write: true,
-      create: true,
-      truncate: true,
-    });
-  }
-
   // The first NZB file is used as the result.
-  const result = await NZB.from(
-    await Deno.open(target as string),
-    target as string,
-  );
-
+  const result = await fetchNZB(target as string);
   for await (const filename of sources) {
-    const nzb = await NZB.from(
-      await Deno.open(filename as string),
-      filename as string,
-    );
-
+    const nzb = await fetchNZB(filename as string);
     // Appends source's files into the target's files.
     result.files.push(...nzb.files);
   }
 
-  await output.write(new TextEncoder().encode(result.toString()));
-  output.close();
+  const writer = output.getWriter();
+  await writer.write(new TextEncoder().encode(result.toString()));
+  writer.close();
 }

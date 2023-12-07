@@ -1,55 +1,14 @@
-#!/usr/bin/env -S deno run --allow-env --allow-net --allow-write
-import { Client, DelimiterStream, parseFlags } from "./deps.ts";
-import { File, NZB, Output, Segment } from "./model.ts";
+#!/usr/bin/env -S deno run --allow-env --allow-net
+import { Client, DelimiterStream, parseArgs } from "./deps.ts";
+import { File, NZB, Segment } from "./model.ts";
 import { yEncParse } from "./util.ts";
-
-const encoder = new TextEncoder();
-const CRLF = encoder.encode("\r\n");
-
-const parseOptions = {
-  string: [
-    "hostname",
-    "port",
-    "username",
-    "password",
-    "group",
-    "range",
-    "meta",
-    "out",
-  ],
-  boolean: [
-    "ssl",
-  ],
-  collect: [
-    "meta",
-  ],
-  alias: {
-    "hostname": ["host", "h"],
-    "port": "P",
-    "username": ["user", "u"],
-    "password": ["pass", "p"],
-    "meta": ["M"],
-    "out": "o",
-  },
-  default: {
-    hostname: Deno.env.get("NNTP_HOSTNAME"),
-    port: Deno.env.get("NNTP_PORT"),
-    username: Deno.env.get("NNTP_USER"),
-    password: Deno.env.get("NNTP_PASS"),
-    ssl: Deno.env.get("NNTP_SSL") === "true",
-  },
-};
-
-if (import.meta.main) {
-  await search();
-}
 
 export function help() {
   return `NZB Search
   Search files and stores results into an NZB file.
 
 INSTALL:
-  deno install --allow-env --allow-net --allow-write -n nzb-search https://deno.land/x/nzb/search.ts
+  deno install --allow-env --allow-net -n nzb-search https://deno.land/x/nzb/search.ts
 
 USAGE:
   nzb-search [...options] <query>
@@ -58,24 +17,50 @@ USAGE:
     --group <group> Group name to search from
     --range <start>-[end] Range of article numbers to search within.
     --meta <name>=<value> Meta data to add in the resulting NZB, such as password.
-    -o, --out <out> Output file (default stdout)
 
 PERMISSIONS:
   --allow-env: to read environment variables for NTTP providers.
-  --allow-net: to connect to NNTP provider.
-  --allow-write: to write NZB file to disk.`;
+  --allow-net: to connect to NNTP provider.`;
+}
+
+const encoder = new TextEncoder();
+const CRLF = encoder.encode("\r\n");
+
+const parseOptions = {
+  string: [
+    "hostname",
+    "username",
+    "password",
+    "group",
+    "range",
+  ],
+  boolean: [
+    "ssl",
+  ],
+  collect: ["meta"],
+  default: {
+    hostname: Deno.env.get("NNTP_HOSTNAME"),
+    port: Number(Deno.env.get("NNTP_PORT")),
+    username: Deno.env.get("NNTP_USER"),
+    password: Deno.env.get("NNTP_PASS"),
+    ssl: Deno.env.get("NNTP_SSL") === "true",
+    group: "",
+    range: "",
+  },
+};
+
+if (import.meta.main) {
+  search(Deno.args, Deno.stdout.writable);
 }
 
 /**
  * Searches files matching query and stores into a NZB file.
- *
- * If `out` flag is specified with a path to a file, writes resulting
- * to that file; otherwise, to `stdout`.
- *
- * A second parameter can be used to provide non-string arguments,
- * such as `out` with a `Writer`.
  */
-export async function search(args = Deno.args, defaults = {}) {
+export async function search(
+  args: unknown[] = Deno.args,
+  output = Deno.stdout.writable,
+) {
+  const parsedArgs = parseArgs(args as string[], parseOptions);
   let {
     _: [query],
     hostname,
@@ -86,12 +71,7 @@ export async function search(args = Deno.args, defaults = {}) {
     group,
     range,
     meta,
-    ...flags
-  } = parseFlags(args, parseOptions);
-
-  const options = Object.assign(defaults, flags);
-  const { out } = options;
-  let client = options.client as unknown as Client;
+  } = parsedArgs;
 
   if (!query) {
     console.error("Missing query");
@@ -99,29 +79,15 @@ export async function search(args = Deno.args, defaults = {}) {
     return;
   }
 
-  let output: Output = out as string;
-  if (!out || out === "-") {
-    output = Deno.stdout;
-  } else if (typeof out === "string") {
-    output = await Deno.open(out, {
-      read: false,
-      write: true,
-      create: true,
-      truncate: true,
-    });
-  }
+  const client = await Client.connect({
+    hostname: `${hostname}`,
+    port: Number(port),
+    ssl: !!ssl,
+    logLevel: "WARNING",
+  });
 
-  if (!client) {
-    client = await Client.connect({
-      hostname: hostname as string,
-      port: Number(port),
-      ssl: !!ssl,
-      logLevel: "WARNING",
-    });
-
-    if (username) {
-      await client.authinfo(username as string, password as string);
-    }
+  if (username) {
+    await client.authinfo(`${username}`, `${password}`);
   }
 
   let response;
@@ -164,7 +130,7 @@ export async function search(args = Deno.args, defaults = {}) {
   let lastArticleNumber: string;
 
   // TODO: parallelize
-  response.body!
+  return response.body!
     // `OVER` command returns a stream of articles in each lines.
     .pipeThrough(new DelimiterStream(CRLF))
     .pipeThrough(new TextDecoderStream())
@@ -225,6 +191,5 @@ export async function search(args = Deno.args, defaults = {}) {
       }),
     )
     .pipeThrough(new TextEncoderStream())
-    // Sends result to output.
-    .pipeTo(output.writable, { preventClose: true });
+    .pipeTo(output, { preventClose: true });
 }

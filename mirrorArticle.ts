@@ -1,13 +1,55 @@
-import { Article, Client, parseFlags, retry } from "./deps.ts";
+import { Article, Client, parseArgs, retry } from "./deps.ts";
+
+export function help() {
+  return `NZB Mirror Article
+  Mirrors an article to another.`;
+}
+
+const parseOptions = {
+  string: [
+    "hostname",
+    "username",
+    "password",
+  ],
+  boolean: [
+    "ssl",
+    "join-group",
+    "progress",
+  ],
+  default: {
+    hostname: Deno.env.get("NNTP_HOSTNAME"),
+    port: Number(Deno.env.get("NNTP_PORT")),
+    ssl: Deno.env.get("NNTP_SSL") === "true",
+    username: Deno.env.get("NNTP_USER"),
+    password: Deno.env.get("NNTP_PASS"),
+    "connect-retries": 1,
+    "reconnect-delay": 15 * 1000,
+    "request-retries": 5,
+    "post-retry-delay": 0,
+    "join-group": false,
+    progress: false,
+  },
+};
 
 export async function mirrorArticle(
-  src: string | Article = Deno.args[0],
+  args: unknown[] = Deno.args,
   dst: Article = new Article(),
-  options = parseFlags(Deno.args),
-): Promise<Article | null> {
-  if (typeof src === "string") {
-    src = new Article(src);
+) {
+  const parsedArgs = parseArgs(args as string[], parseOptions);
+  const {
+    _: [input],
+    ...options
+  } = parsedArgs;
+
+  if (!input) {
+    console.error("Missing input");
+    console.error(help());
+    return;
   }
+
+  const src = typeof input === "string"
+    ? new Article(input)
+    : input as unknown as Article;
 
   const originalMessageId = src.headers.get("message-id")!;
   const messageId = dst.headers.get("message-id") ||
@@ -52,7 +94,7 @@ export async function mirrorArticle(
     },
   );
 
-  await client.close();
+  client.close();
 
   if (response.status === 240) {
     return dst;
@@ -63,20 +105,20 @@ export async function mirrorArticle(
   return null;
 }
 
-async function setup(options: Record<string, string> = {}) {
+async function setup(options: Record<string, unknown> = {}) {
   const { hostname, port, ssl, username, password } = options;
 
   return await retry(
     async () => {
       const client = await Client.connect({
-        hostname,
+        hostname: `${hostname}`,
         port: Number(port),
         ssl: !!ssl,
         logLevel: "WARNING",
       });
 
       if (username) {
-        await client.authinfo(username, password);
+        await client.authinfo(`${username}`, `${password}`);
       }
 
       return client;

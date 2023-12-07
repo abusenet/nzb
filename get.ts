@@ -3,51 +3,13 @@ import {
   Client,
   DelimiterStream,
   endsWith,
-  parseFlags,
+  parseArgs,
   startsWith,
   YEncDecoderStream,
 } from "./deps.ts";
 
-import { NZB, Output } from "./model.ts";
+import { File, NZB } from "./model.ts";
 import { fetchNZB } from "./util.ts";
-
-const encoder = new TextEncoder();
-const CRLF = encoder.encode("\r\n");
-const YBEGIN = encoder.encode("=ybegin");
-const YPART = encoder.encode("=ypart");
-const YEND = encoder.encode("=yend");
-
-const parseOptions = {
-  string: [
-    "hostname",
-    "port",
-    "username",
-    "password",
-    "start",
-    "end",
-  ],
-  boolean: [
-    "ssl",
-  ],
-  alias: {
-    "hostname": ["host", "h"],
-    "port": "P",
-    "ssl": "S",
-    "username": ["user", "u"],
-    "password": ["pass", "p"],
-  },
-  default: {
-    hostname: Deno.env.get("NNTP_HOSTNAME"),
-    port: Deno.env.get("NNTP_PORT"),
-    username: Deno.env.get("NNTP_USER"),
-    password: Deno.env.get("NNTP_PASS"),
-    ssl: Deno.env.get("NNTP_SSL") === "true",
-  },
-};
-
-if (import.meta.main) {
-  await get();
-}
 
 export function help() {
   return `NZB Get
@@ -69,74 +31,90 @@ OPTIONS:
   --end, -e <end> The end of the range of the file to fetch.`;
 }
 
+const encoder = new TextEncoder();
+const CRLF = encoder.encode("\r\n");
+const YBEGIN = encoder.encode("=ybegin");
+const YPART = encoder.encode("=ypart");
+const YEND = encoder.encode("=yend");
+
+const parseOptions = {
+  string: [
+    "hostname",
+    "username",
+    "password",
+  ],
+  boolean: [
+    "ssl",
+  ],
+  default: {
+    hostname: Deno.env.get("NNTP_HOSTNAME"),
+    port: Number(Deno.env.get("NNTP_PORT")),
+    username: Deno.env.get("NNTP_USER"),
+    password: Deno.env.get("NNTP_PASS"),
+    ssl: Deno.env.get("NNTP_SSL") === "true",
+    start: 0,
+    end: 0,
+  },
+};
+
+if (import.meta.main) {
+  get(Deno.args, Deno.stdout.writable);
+}
+
 /**
  * Retrieves a file speficified by the given NZB and file name.
  *
  * All segments of the file are returned as a single stream, clipped to
  * the given range if any.
+ * @param {unknown[]} args The argument list.
+ * @param {WritableStream<Uint8Array>} [writable] The writable stream to write to.
  */
-export async function get(args = Deno.args, defaults = {}) {
-  const {
+export async function get(
+  args: unknown[] = Deno.args,
+  output = Deno.stdout.writable,
+) {
+  const parsedArgs = parseArgs(args as string[], parseOptions);
+  let {
     _: [input, filename],
     hostname,
     port,
     ssl,
     username,
     password,
-    ...flags
-  } = parseFlags(args, parseOptions);
+    start = 0,
+    end,
+  } = parsedArgs;
 
-  let { out, nzb, file, start = 0, end, client } = Object.assign(
-    defaults,
-    flags,
-  );
-
-  //#region Normalize params
   if (!input || !filename) {
     console.error("Missing input");
     console.error(help());
     return;
   }
 
-  /**
-   * A `file` can be passed directly from API call; otherwise,
-   * retrieves it from the NZB, which can also be passed directly.
-   */
-  if (!file) {
-    if (!nzb) {
-      nzb = await fetchNZB(input as string);
-    }
+  const nzb = typeof input === "string"
+    ? await fetchNZB(input)
+    : input as unknown as NZB;
+  const file = typeof filename === "string"
+    ? nzb.file(filename)
+    : filename as unknown as File;
 
-    file = (nzb as NZB).file(filename as string);
+  if (!file) {
+    console.error(`File "${filename}" not found in NZB`);
+    return;
   }
 
   start = Number(start);
   end = Number(end || (file.size - 1));
 
-  if (!client) {
-    client = await Client.connect({
-      hostname,
-      port: Number(port),
-      ssl: !!ssl,
-    });
+  const client = await Client.connect({
+    hostname,
+    port: Number(port),
+    ssl: !!ssl,
+  });
 
-    if (username) {
-      await client.authinfo(username, password);
-    }
+  if (username) {
+    await client.authinfo(username, password);
   }
-
-  let output: Output = out;
-  if (!out || out === "-") {
-    output = Deno.stdout;
-  } else if (typeof out === "string") {
-    output = await Deno.open(out, {
-      read: false,
-      write: true,
-      create: true,
-      truncate: true,
-    });
-  }
-  //#endregion
 
   const segments = [];
   let size = 0;
@@ -170,7 +148,6 @@ export async function get(args = Deno.args, defaults = {}) {
     }
   }
 
-  // Stream each segment
   (async () => {
     for (const segment of segments) {
       const response = await client.body(segment.id);
@@ -184,10 +161,10 @@ export async function get(args = Deno.args, defaults = {}) {
         // Trims to data within range
         .pipeThrough(slice(segment.start, segment.end))
         // Sends result to output.
-        .pipeTo(output.writable, { preventClose: true });
+        .pipeTo(output, { preventClose: true });
     }
     // … and signal that we are finished afterwards.
-    await output.writable.close();
+    await output.close();
   })().catch((err) => {
     console.error(err);
   });

@@ -3,77 +3,13 @@ import {
   Article,
   basename,
   extname,
-  parseFlags,
+  parseArgs,
   pooledMap,
   prettyBytes,
 } from "./deps.ts";
 
-import { Output } from "./model.ts";
 import { mirrorArticle } from "./mirrorArticle.ts";
 import { fetchNZB, Progress } from "./util.ts";
-
-const encoder = new TextEncoder();
-
-const parseOptions = {
-  string: [
-    "hostname",
-    "port",
-    "username",
-    "password",
-    "connections",
-    "connect-retries",
-    "reconnect-delay",
-    "request-retries",
-    "post-retry-delay",
-
-    "comment",
-    "comment2",
-    "subject",
-
-    "from",
-    "groups",
-    "date",
-    "message-id", // Format of generated Message-ID. Default to `${uuid}@nntp`
-
-    "out",
-  ],
-  boolean: [
-    "ssl",
-    "progress",
-  ],
-  alias: {
-    "hostname": ["host", "h"],
-    "port": "P",
-    "ssl": "S",
-    "username": ["user", "u"],
-    "password": ["passw", "p"],
-    "connections": "n",
-
-    "comment": "t",
-    "subject": "s",
-    "from": "f",
-    "groups": "g",
-    "messageId": ["message-id"],
-
-    "out": "o",
-  },
-  default: {
-    hostname: Deno.env.get("NNTP_HOSTNAME"),
-    port: Deno.env.get("NNTP_PORT"),
-    ssl: Deno.env.get("NNTP_SSL") === "true",
-    username: Deno.env.get("NNTP_USER"),
-    password: Deno.env.get("NNTP_PASS"),
-    connections: Number(Deno.env.get("NNTP_CONNECTIONS") || 3),
-    from: Deno.env.get("NNTP_POSTER") || "poster@example.com",
-    groups: "",
-    date: "",
-    messageId: "",
-  },
-};
-
-if (import.meta.main) {
-  await mirror();
-}
 
 export function help() {
   return `NZB Mirror
@@ -107,6 +43,65 @@ OPTIONS:
   --progress, -p Whether to show progress.`;
 }
 
+const encoder = new TextEncoder();
+
+const parseOptions = {
+  string: [
+    "hostname",
+    "port",
+    "username",
+    "password",
+    "connections",
+    "connect-retries",
+    "reconnect-delay",
+    "request-retries",
+    "post-retry-delay",
+
+    "comment",
+    "comment2",
+    "subject",
+
+    "from",
+    "groups",
+    "date",
+    "message-id", // Format of generated Message-ID. Default to `${uuid}@nntp`
+  ],
+  boolean: [
+    "ssl",
+    "progress",
+  ],
+  alias: {
+    "hostname": ["host", "h"],
+    "port": "P",
+    "ssl": "S",
+    "username": ["user", "u"],
+    "password": ["passw", "p"],
+    "connections": "n",
+
+    "comment": "t",
+    "subject": "s",
+    "from": "f",
+    "groups": "g",
+    "messageId": ["message-id"],
+  },
+  default: {
+    hostname: Deno.env.get("NNTP_HOSTNAME"),
+    port: Deno.env.get("NNTP_PORT"),
+    ssl: Deno.env.get("NNTP_SSL") === "true",
+    username: Deno.env.get("NNTP_USER"),
+    password: Deno.env.get("NNTP_PASS"),
+    connections: Number(Deno.env.get("NNTP_CONNECTIONS") || 3),
+    from: Deno.env.get("NNTP_POSTER") || "poster@example.com",
+    groups: "",
+    date: "",
+    messageId: "",
+  },
+};
+
+if (import.meta.main) {
+  await mirror(Deno.args, Deno.stdout.writable);
+}
+
 /**
  * Mirrors an NZB to another
  *
@@ -115,8 +110,11 @@ OPTIONS:
  *
  * The new segments and files are gathered into a new NZB.
  */
-export async function mirror(args = Deno.args, defaults = {}): Promise<void> {
-  const options = parseFlags(args, parseOptions);
+export async function mirror(
+  args = Deno.args,
+  writable = Deno.stdout.writable,
+): Promise<void> {
+  const parsedArgs = parseArgs(args as string[], parseOptions);
   let {
     _: [input],
     connections,
@@ -127,12 +125,8 @@ export async function mirror(args = Deno.args, defaults = {}): Promise<void> {
     groups,
     date,
     messageId,
-  } = options;
-
-  const { out, progress, transform = mirrorArticle } = Object.assign(
-    defaults,
-    options,
-  );
+    progress,
+  } = parsedArgs;
 
   if (!input) {
     console.error("Missing input");
@@ -141,54 +135,16 @@ export async function mirror(args = Deno.args, defaults = {}): Promise<void> {
   }
 
   const nzb = await fetchNZB(input as string);
-  const { name, size, head, files } = nzb;
+  const { size, head, files } = nzb;
 
-  let output: Output;
-  if (!out || out === "-") {
-    output = Deno.stdout;
-  } else if (typeof out === "string") {
-    const params: Record<string, string | number> = {
-      /** Number of files in collection */
-      files: files.length,
-      /** File's name */
-      filename: name!,
-      /** File's name without extension */
-      fnamebase: basename(name!, extname(name!)),
-      /** File's size in bytes */
-      filesize: size,
-      /** File's size in KiB, rounded to 2dp */
-      fileksize: (size / 1000).toFixed(2),
-      /** File's size in MiB, rounded to 2dp */
-      filemsize: (size / 1000 / 1000).toFixed(2),
-      /** File's size in GiB, rounded to 2dp */
-      filegsize: (size / 1000 / 1000 / 1000).toFixed(2),
-      /** File's size in TiB, rounded to 2dp */
-      filetsize: (size / 1000 / 1000 / 1000 / 1000).toFixed(2),
-      /** Friendly formatted file size, e.g. '4.85 MiB' or '35.1 GiB' */
-      fileasize: prettyBytes(size),
-    };
-
-    const outfile = (out as string).replace(
-      /{(.*?)}/g,
-      (_0: string, name: string) => `${params[name]}`,
-    );
-
-    output = await Deno.open(outfile, {
-      read: false,
-      write: true,
-      create: true,
-      truncate: true,
-    });
-  } else {
-    output = out;
-  }
+  const output = writable.getWriter();
 
   // `date` can have the special value 'now' to refer script's start time.
   if (date === "now") {
     date = new Date().toUTCString();
   }
 
-  function writeln(lines: string | string[], ending = "\n"): Promise<number> {
+  function writeln(lines: string | string[], ending = "\n") {
     if (!output) return Promise.resolve(0);
     if (!Array.isArray(lines)) {
       lines = [lines];
@@ -324,8 +280,13 @@ export async function mirror(args = Deno.args, defaults = {}): Promise<void> {
       filenum++;
     }
 
-    const result = await transform(
-      article,
+    const argv: unknown[] = [article];
+    Object.entries(parsedArgs).forEach(([key, value]) => {
+      argv.push(`--${key}`);
+      argv.push(`${value}`);
+    });
+    const result = await mirrorArticle(
+      argv,
       new Article({
         headers: {
           /** Uses the new `date` if any. */
@@ -342,7 +303,6 @@ export async function mirror(args = Deno.args, defaults = {}): Promise<void> {
           "message-id": newMessageId,
         },
       }),
-      options,
     );
 
     result!.number = number;

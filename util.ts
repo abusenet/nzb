@@ -1,11 +1,4 @@
-import {
-  basename,
-  extname,
-  prettyBytes,
-  ProgressBar,
-  readerFromStreamReader,
-  render,
-} from "./deps.ts";
+import { basename, extname, prettyBytes, ProgressBar, render } from "./deps.ts";
 import { NZB } from "./model.ts";
 
 /**
@@ -20,7 +13,7 @@ export async function fetchNZB(input: string) {
   }
 
   return NZB.from(
-    readerFromStreamReader(body.getReader()),
+    body,
     input,
   );
 }

@@ -7,16 +7,6 @@ import { mirror } from "./mirror.ts";
 import { search } from "./search.ts";
 import { serve } from "./serve.ts";
 
-const exports = {
-  check,
-  combine,
-  extract,
-  get,
-  mirror,
-  search,
-  serve,
-};
-
 export function help() {
   return `NZB Toolkit
   Various tools for handling NZB files
@@ -59,6 +49,16 @@ OPTIONS:
   --out, -o <out> The output file.
   --progress, -p Whether to show progress.`;
 }
+
+const exports = {
+  check,
+  combine,
+  extract,
+  get,
+  mirror,
+  search,
+  serve,
+};
 
 if (import.meta.main) {
   const [command, ...args] = Deno.args;
