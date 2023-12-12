@@ -5,6 +5,7 @@
   <xsl:output method="html" encoding="utf-8" indent="yes" media-type="text/html; charset=utf-8" />
 
   <xsl:template match="/*[local-name() = 'nzb']">
+    <xsl:variable name="title" select="*/*[local-name() = 'meta' and @*[local-name() = 'type' and . = 'title']]" />
 
     <!-- Set the DOCTYPE targeting HTML5 -->
     <xsl:text disable-output-escaping='yes'>&lt;!DOCTYPE html></xsl:text>
@@ -13,7 +14,7 @@
       <!-- Set default language to En. -->
       <xsl:attribute name="lang">en</xsl:attribute>
       <head>
-        <title><xsl:value-of select="*/meta[@type = 'title']" /></title>
+        <title><xsl:value-of select="$title" /></title>
         <meta charset="UTF-8" />
         <meta name="viewport" content="width=device-width, initial-scale=1.0" />
         <link rel="icon" href='data:image/svg+xml,&lt;svg xmlns="http://www.w3.org/2000/svg"/>'></link>
@@ -27,7 +28,7 @@
 
       <body>
         <main>
-          <h1>Index of</h1>
+          <h1>Index of <xsl:value-of select="$title" /></h1>
 
           <form>
             <label>

@@ -10,7 +10,7 @@ import {
   STATUS_TEXT,
 } from "./deps.ts";
 
-import { File, NZB } from "./model.ts";
+import { NZB } from "./model.ts";
 import { extract } from "./extract.ts";
 import { get } from "./get.ts";
 import { fetchNZB } from "./util.ts";
@@ -69,13 +69,13 @@ if (import.meta.main) {
 }
 
 /**
- * Serves an input NZB as a folder listing.
+ * Serves an input NZB.
  *
  * This is a handler to be passed to a web server like `Deno.serve` to
  * serve the input NZB as listing with `serveNZBIndex`, and routes file
  * requests to `serveFile`.
  */
-export function serve(args = Deno.args, server = Deno.serve) {
+function serve(args = Deno.args, server = Deno.serve) {
   const parsedArgs = parseArgs(args as string[], parseOptions);
   const {
     _: [input = ""],
@@ -91,45 +91,21 @@ export function serve(args = Deno.args, server = Deno.serve) {
   }
   const [hostname, port] = address.split(":");
 
-  server({ hostname, port: Number(port) }, async (request, conn) => {
+  server({ hostname, port: Number(port) }, async (request) => {
     const url = new URL(request.url);
-    const { pathname, searchParams } = url;
+    const { searchParams } = url;
 
-    if (pathname === "/favicon.ico") {
-      return new Response(null);
-    }
-
-    if (!searchParams.has("template")) {
+    if (!searchParams.get("template")) {
       searchParams.set("template", template);
     }
 
-    if (pathname === "/index.xsl") {
-      return fetch(
-        new URL(searchParams.get("template")!, import.meta.url).href,
-      );
+    if (!searchParams.get("url")) {
+      searchParams.set("url", input as string);
     }
 
-    const nzb = await fetchNZB(searchParams.get("url") || input as string);
-
-    if (pathname === "/") {
-      const response = await serveNZBIndex(request, conn, { nzb });
-
-      if (verbose) {
-        serverLog(request, response.status);
-      }
-
-      return response;
-    }
-
-    const file = nzb.file(decodeURI(pathname.substring(1)));
-
-    if (!file) {
-      throw new Deno.errors.NotFound();
-    }
-
+    // Reconstruct the URL with the new search params
     request = new Request(url, request);
-    const response = await serveFile(request, conn, { nzb, file });
-
+    const response = await router(request);
     if (verbose) {
       serverLog(request, response.status);
     }
@@ -139,29 +115,27 @@ export function serve(args = Deno.args, server = Deno.serve) {
 }
 
 /**
- * Serves a request for NZB file as a folder listing
+ * Serves content of NZB file
  *
- * The NZB path should be passed as a route paramter. Both uncompressed
- * or gzipped NZB files are supported. The provided NZB path is used to
+ * The NZB URL must be passed as search paramter `url`. Both uncompressed
+ * or gzipped NZB files are supported. The provided NZB URL is used to
  * construct an `NZB` object which is used to serve its content.
  *
  * ```ts
- * import { serve } from "https://deno.land/std@0.147.0/http/server.ts";
- * import { router } from "https://crux.land/router@0.0.12";
+ * import { router } from "./serve.ts";
  *
- * import { serveNZBIndex } from "./serve.ts";
+ * await Deno.serve((request) => {
+ *   const url = new URL(request.url);
+ *   const { searchParams } = url;
  *
- * await serve(
- *   router({
- *     "/*.nzb{:gzip(.gz)}?{/}?": (request, conn, params) => {
- *       const { 0: pathname, gzip } = params;
- *       const nzb = `${pathname}.nzb${gzip}`;
- *       return serveNZBIndex(request, conn, {
- *         nzb: decodeURIComponent(nzb),
- *       });
- *     },
- *     },
- *   }),
+ *   // Defaults to a specific NZB
+ *   if (!searchParams.get("url")) {
+ *     searchParams.set("url", "https://sabnzbd.org/tests/test_download_100MB.nzb");
+ *   }
+ *
+ *   // Reconstruct the URL with the new search params
+ *   request = new Request(url, request);
+ *   return router(request);
  * );
  * ```
  *
@@ -172,30 +146,68 @@ export function serve(args = Deno.args, server = Deno.serve) {
  *
  * Right now the only supported action is "extract".
  *
- * By default, the listing is rendered using the built-in `index.html`
+ * By default, the listing is rendered using the built-in `index.xsl`
  * template, which simply displays the NZB information and its files as
- * clickable links, which are then handled by `serveFile` handler.
+ * clickable links, which can be downloaded or streamed.
  *
  * This template can be changed by setting `template` query parameter
- * to another URL. The template could be anything with placeholders for
- * `name` and `files`. See `index.html` for an example.
+ * to another URL. The template could do anything using NZB content as
+ * XML data. See `index.xsl` for an example.
  *
  * Even though the base template is static HTML, there should not be
  * any stopping you from going full SPA (Single Page Application) with
  * it. You can even have a template the returns JSON instead, and serve
  * your own index page.
  */
-export async function serveNZBIndex(
-  request: Request,
-  _conn: Deno.ServeHandlerInfo,
-  { nzb }: Record<string, string | NZB>,
-): Promise<Response> {
-  if (typeof nzb === "string") {
-    nzb = await fetchNZB(nzb);
+function router(request: Request) {
+  const url = new URL(request.url);
+  const { pathname, searchParams } = url;
+
+  if (pathname === "/favicon.ico") {
+    return new Response(null);
   }
 
-  const name = basename(nzb.name as string);
+  // Template request from the NZB.
+  if (pathname === "/index.xsl") {
+    return fetch(
+      new URL(searchParams.get("template")!, import.meta.url).href,
+    );
+  }
+
+  if (pathname === "/") {
+    return index(request);
+  }
+
+  return file(request);
+}
+
+const exports = {
+  fetch: router,
+};
+
+export {
+  // For Cloudflare Workers.
+  exports as default,
+  router as fetch,
+  serve,
+};
+
+/**
+ * List files in an NZB.
+ * @param {Request} request
+ * @returns {Promise<Response>}
+ */
+async function index(request: Request) {
   const { searchParams } = new URL(request.url);
+  const url = searchParams.get("url");
+
+  if (!url) {
+    return new Response(null, { status: STATUS_CODE.BadRequest });
+  }
+
+  let nzb = await fetchNZB(url);
+
+  const name = basename(nzb.name as string);
   const query = searchParams.get("q");
   const action = searchParams.get("action");
 
@@ -241,56 +253,35 @@ export async function serveNZBIndex(
 /**
  * Serves a request for a file inside an NZB.
  *
- * The NZB path and the file name should be passed as a route paramter.
- * Both uncompressed or gzipped construct an `NZB` object which is used
- * to retrieve the requested file's information.
- *
- * The file is then requested through NNTP and streamed back to the
+ * The file is requested through NNTP and streamed back to the
  * client. It is up to the client to handle the response, whether to
  * play the media file, or to ask the user to save it to disk.
  *
  * Range request is supported.
- *
- * ```ts
- * import { serve } from "https://deno.land/std@0.147.0/http/server.ts";
- * import { router } from "https://crux.land/router@0.0.12";
- *
- * import { serveFile } from "./serve.ts";
- *
- * await serve(
- *   router({
- *     "/*.nzb{:gzip(.gz)}?/:file": (request, conn, params) => {
- *       const { 0: pathname, gzip, file } = params;
- *       const nzb = `${pathname}.nzb${gzip}`;
- *       return serveFile(request, conn, {
- *         nzb: decodeURIComponent(nzb),
- *         file: decodeURIComponent(file),
- *       });
- *     },
- *   }),
- * );
- * ```
  *
  * Internally, the handler normalizes the request and passes to `get`
  * to do the fetching and streaming. All NNTP information are retrieved
  * from environment variables, unless specified through querystring.
  *
  * See `get` for the list of parameters.
+ *
+ * @param {Request} request
+ * @returns {Promise<Response>}
  */
-export async function serveFile(
-  request: Request,
-  _conn: Deno.ServeHandlerInfo,
-  { nzb, file }: { nzb: NZB; file: File },
-): Promise<Response> {
-  if (typeof file === "string") {
-    if (typeof nzb === "string") {
-      nzb = await fetchNZB(nzb);
-    }
+async function file(request: Request) {
+  const { pathname, searchParams } = new URL(request.url);
+  const url = searchParams.get("url");
 
-    file = (nzb as NZB).file(file as string) as File;
+  if (!url) {
+    return new Response(null, { status: STATUS_CODE.BadRequest });
   }
 
-  file = file as File;
+  const nzb = await fetchNZB(url);
+  const file = nzb.file(decodeURI(pathname.substring(1)));
+
+  if (!file) {
+    return new Response(null, { status: STATUS_CODE.NotFound });
+  }
 
   const headers = new Headers();
   // Set "Accept-Ranges" so that the client knows it can make range requests on future requests
@@ -395,7 +386,6 @@ export async function serveFile(
     return new Response(null, responseInit);
   }
 
-  const { searchParams } = new URL(request.url);
   searchParams.set("start", `${start}`);
   searchParams.set("end", `${end}`);
 
