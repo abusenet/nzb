@@ -6,19 +6,54 @@ import {
   TextChunk,
 } from "npm:@worker-tools/html-rewriter@0.1.0-pre.17/base64";
 
-export interface File {
-  poster: string;
+export class File {
+  poster!: string;
   /**
    * The last modified date of the file as the number of milliseconds
    * since the Unix epoch (January 1, 1970 at midnight). Files without
    * a known last modified date return the current date.
    */
-  lastModified: number;
-  name: string;
-  size: number;
-  subject: string;
-  groups: string[];
-  segments: Segment[];
+  lastModified!: number;
+  name!: string;
+  size!: number;
+  subject!: string;
+  groups!: string[];
+  segments!: Segment[];
+
+  constructor(file: File) {
+    Object.assign(this, file);
+  }
+
+  toString() {
+    const { poster, lastModified, subject, groups, segments } = this;
+    return [
+      `  <file poster="${escapeXml(poster)}" date="${
+        lastModified / 1000
+      }" subject="${escapeXml(subject)}">`,
+
+      `    <groups>`,
+      `${
+        groups.map((group) =>
+          [
+            `      <group>${group}</group>`,
+          ].join("\n")
+        ).join("\n")
+      }`,
+      `    </groups>`,
+
+      `    <segments>`,
+      `${
+        segments.map(({ id, size, number }) =>
+          [
+            `      <segment bytes="${size}" number="${number}">${id}</segment>`,
+          ].join("\n")
+        ).join("\n")
+      }`,
+      `    </segments>`,
+
+      `  </file>`,
+    ].join("\n");
+  }
 }
 
 export interface Segment {
@@ -34,6 +69,7 @@ export type Output = {
 
 export class NZB implements Iterable<File> {
   #readable?: ReadableStream;
+  readonly processingInstructions: Record<string, Record<string, string>> = {};
   readonly head: Record<string, string> = {};
   readonly files: File[] = [];
   #segments = 0;
@@ -53,6 +89,10 @@ export class NZB implements Iterable<File> {
 
   get segments(): number {
     return this.#segments;
+  }
+
+  pi(name: string, data: Record<string, string>) {
+    this.processingInstructions[name] = data;
   }
 
   parse(readable = this.#readable) {
@@ -99,7 +139,7 @@ export class NZB implements Iterable<File> {
       .on("file", {
         element: (element: Element) => {
           const subject = unescapeXml(element.getAttribute("subject"));
-          const file: File = {
+          const file: File = new File({
             poster: element.getAttribute("poster"),
             subject,
             name: "",
@@ -108,7 +148,7 @@ export class NZB implements Iterable<File> {
             size: 0,
             groups: [],
             segments: [],
-          };
+          });
 
           if (!subject.indexOf("yEnc")) return;
           const { name, size } = yEncParse(subject);
@@ -209,6 +249,13 @@ export class NZB implements Iterable<File> {
   toString() {
     return [
       `<?xml version="1.0" encoding="utf-8"?>`,
+      Object.entries(this.processingInstructions).map(([name, data]) =>
+        `<?${name} ${
+          Object.entries(data).map(([key, value]) => `${key}="${value}"`).join(
+            " ",
+          )
+        }?>`
+      ).join("\n"),
       `<!DOCTYPE nzb PUBLIC "-//newzBin//DTD NZB 1.1//EN" "http://www.newzbin.com/DTD/nzb/nzb-1.1.dtd">`,
       `<nzb xmlns="http://www.newzbin.com/DTD/2003/nzb">`,
 
@@ -222,37 +269,7 @@ export class NZB implements Iterable<File> {
       }`,
       `  </head>`,
 
-      `${
-        this.files.map(({ poster, lastModified, subject, groups, segments }) =>
-          [
-            `  <file poster="${escapeXml(poster)}" date="${
-              lastModified / 1000
-            }" subject="${escapeXml(subject)}">`,
-
-            `    <groups>`,
-            `${
-              groups.map((group) =>
-                [
-                  `      <group>${group}</group>`,
-                ].join("\n")
-              ).join("\n")
-            }`,
-            `    </groups>`,
-
-            `    <segments>`,
-            `${
-              segments.map(({ id, size, number }) =>
-                [
-                  `      <segment bytes="${size}" number="${number}">${id}</segment>`,
-                ].join("\n")
-              ).join("\n")
-            }`,
-            `    </segments>`,
-
-            `  </file>`,
-          ].join("\n")
-        ).join("\n")
-      }`,
+      `${this.files.map((file) => `${file}`).join("\n")}`,
 
       `</nzb>`,
     ].join("\n");

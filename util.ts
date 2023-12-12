@@ -1,4 +1,4 @@
-import { basename, extname, prettyBytes, ProgressBar, render } from "./deps.ts";
+import { extname, prettyBytes, ProgressBar } from "./deps.ts";
 import { NZB } from "./model.ts";
 
 /**
@@ -16,19 +16,6 @@ export async function fetchNZB(input: string) {
     body,
     input,
   );
-}
-
-export function templatized(
-  template: string,
-  assigns = {},
-  filters = {},
-): Promise<string> {
-  filters = Object.assign({
-    basename,
-    prettyBytes,
-    UTCString: (date: string | number | Date) => new Date(date).toUTCString(),
-  }, filters);
-  return render(template, assigns, filters);
 }
 
 /**

@@ -13,7 +13,7 @@ import {
 import { File, NZB } from "./model.ts";
 import { extract } from "./extract.ts";
 import { get } from "./get.ts";
-import { fetchNZB, templatized } from "./util.ts";
+import { fetchNZB } from "./util.ts";
 
 export function help() {
   return `NZB Server
@@ -36,7 +36,7 @@ OPTIONS:
   --verbose, -v <true|false> Whether to log requests (default false)`;
 }
 
-const DEFAULT_TEMPLATE = "./index.html";
+const DEFAULT_TEMPLATE = "./index.xsl";
 
 const encoder = new TextEncoder();
 
@@ -95,14 +95,21 @@ export function serve(args = Deno.args, server = Deno.serve) {
     const url = new URL(request.url);
     const { pathname, searchParams } = url;
 
-    const nzb = await fetchNZB(searchParams.get("url") || input as string);
+    if (pathname === "/favicon.ico") {
+      return new Response(null);
+    }
+
     if (!searchParams.has("template")) {
       searchParams.set("template", template);
     }
 
-    if (pathname === "/favicon.ico") {
-      return new Response(null);
+    if (pathname === "/index.xsl") {
+      return fetch(
+        new URL(searchParams.get("template")!, import.meta.url).href,
+      );
     }
+
+    const nzb = await fetchNZB(searchParams.get("url") || input as string);
 
     if (pathname === "/") {
       const response = await serveNZBIndex(request, conn, { nzb });
@@ -188,7 +195,7 @@ export async function serveNZBIndex(
   }
 
   const name = basename(nzb.name as string);
-  const { pathname, searchParams } = new URL(request.url);
+  const { searchParams } = new URL(request.url);
   const query = searchParams.get("q");
   const action = searchParams.get("action");
 
@@ -221,27 +228,14 @@ export async function serveNZBIndex(
     return new Response(readable, { status, headers });
   }
 
-  headers.set("Content-Type", "text/html");
+  headers.set("Content-Type", "text/xml");
   // Set "Accept-Ranges" so that the client knows it can make range requests on future requests
   headers.set("Accept-Ranges", "bytes");
   headers.set("Date", new Date().toUTCString());
 
-  const template = searchParams.get("template") || DEFAULT_TEMPLATE;
-  const templateText = await fetch(new URL(template, import.meta.url).href)
-    .then(
-      (res) => res.text(),
-    );
+  nzb.pi("xml-stylesheet", { type: "text/xsl", href: "index.xsl" });
 
-  const page = encoder.encode(
-    await templatized(templateText, {
-      base: pathname.replace(/\/$/, ""),
-      name: name,
-      files: nzb.files,
-      params: Object.fromEntries(searchParams),
-    }),
-  );
-
-  return new Response(page, { status, headers });
+  return new Response(nzb.toString(), { status, headers });
 }
 
 /**
